@@ -14,9 +14,17 @@ import matplotlib.pyplot as plt
 import os
 
 class ScRNAseqAgent:
-    def __init__(self):
-        self.adata: Optional[sc.AnnData] = None
-        self.processed: bool = False
+    def __init__(self, file_path: str):
+        """
+        Initialize the ScRNAseqAgent.
+        
+        Args:
+            file_path: Path to the h5ad file
+        """
+        self.file_path = file_path
+        self.adata = sc.read_h5ad(file_path)
+        self.adata.uns['input_path'] = file_path  # Store the input path for later use
+        self.processed = False  # Initialize processed flag
         
     def load_dataset(self, file_path: str) -> bool:
         """Load a dataset from an h5ad file."""
@@ -40,13 +48,16 @@ class ScRNAseqAgent:
         n_neighbors: int = 15,
         n_clusters: int = 10,
         resolution: float = 0.5
-    ) -> None:
+    ) -> bool:
         """Preprocess the data with enhanced visualization."""
         try:
-            # Create output directory
+            # Create output directory in the same folder as input file
             input_path = self.adata.uns.get('input_path', '')
             if input_path:
-                output_dir = os.path.join(os.path.dirname(input_path), 'analysis_results')
+                # Get the directory of the input file
+                input_dir = os.path.dirname(input_path)
+                # Create analysis_results subdirectory in the same folder
+                output_dir = os.path.join(input_dir, 'analysis_results')
             else:
                 output_dir = 'analysis_results'
             os.makedirs(output_dir, exist_ok=True)
@@ -165,19 +176,25 @@ class ScRNAseqAgent:
                 fig.savefig(os.path.join(output_dir, f'violin_plot_{gene}.pdf'), bbox_inches='tight', dpi=300)
                 plt.close(fig)
             
-            # Save preprocessed data
+            # Save preprocessed data in the same directory as input file
             if input_path:
-                output_path = input_path.replace('.h5ad', '_preprocessed.h5ad')
+                # Get the accession number from the input file name
+                accession = os.path.splitext(os.path.basename(input_path))[0]
+                # Save in the same directory as input file
+                output_path = os.path.join(input_dir, f'{accession}_preprocessed.h5ad')
             else:
                 output_path = 'preprocessed.h5ad'
             self.adata.write(output_path)
             st.success(f"Preprocessing completed! Results saved to {output_dir}")
             
+            # Set processed flag
             self.processed = True
+            
+            return True
             
         except Exception as e:
             st.error(f"Error during preprocessing: {str(e)}")
-            raise
+            return False
     
     def generate_umap(self, color: Optional[str] = None) -> None:
         """Generate UMAP plot with optional coloring."""
@@ -230,64 +247,98 @@ class ScRNAseqAgent:
     
     def analyze_cell_populations(
         self,
-        groupby: str,
-        gene_list: List[str]
+        n_genes: int = 25,
+        method: str = 'wilcoxon',
+        min_fold_change: float = 0.25,
+        pval_cutoff: float = 0.05
     ) -> None:
-        """Analyze cell populations and their marker genes."""
-        if not self.processed:
-            st.error("Please preprocess the data first!")
-            return
-        
+        """Analyze cell populations with enhanced visualization."""
         try:
-            # Verify groupby parameter
-            if groupby not in self.adata.obs.columns:
-                st.error(f"Grouping parameter '{groupby}' not found in the dataset.")
-                st.write("Available observation columns:")
-                st.write(self.adata.obs.columns.tolist())
-                return
-            
-            # Create output directory
+            # Create output directory in the same folder as input file
             input_path = self.adata.uns.get('input_path', '')
             if input_path:
-                output_dir = os.path.join(os.path.dirname(input_path), 'analysis_results')
+                # Get the directory of the input file
+                input_dir = os.path.dirname(input_path)
+                # Create analysis_results subdirectory in the same folder
+                output_dir = os.path.join(input_dir, 'analysis_results')
             else:
                 output_dir = 'analysis_results'
             os.makedirs(output_dir, exist_ok=True)
             
-            # Run differential expression analysis
-            sc.tl.rank_genes_groups(self.adata, groupby, method='wilcoxon')
+            # Perform differential expression analysis
+            sc.tl.rank_genes_groups(
+                self.adata,
+                groupby='leiden',
+                method=method,
+                n_genes=n_genes
+            )
             
-            # Display results
+            # Show heatmap of marker genes
+            st.subheader("Marker Genes Heatmap")
             fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
-            sc.pl.rank_genes_groups(self.adata, n_genes=25, sharey=False, show=False, ax=ax)
-            
-            # Enhance plot aesthetics
-            ax.set_title(f'Marker genes for {groupby}', fontsize=16, fontweight='bold', pad=20)
-            ax.set_xlabel('Log fold change', fontsize=14, fontweight='bold')
-            ax.set_ylabel('Gene name', fontsize=14, fontweight='bold')
-            ax.tick_params(axis='both', which='major', labelsize=12)
-            for spine in ax.spines.values():
-                spine.set_linewidth(1.5)
-            
+            sc.pl.rank_genes_groups_heatmap(
+                self.adata,
+                n_genes=n_genes,
+                show=False
+            )
+            ax.set_title('Marker Genes Heatmap', fontsize=16, fontweight='bold', pad=20)
             plt.tight_layout()
             st.pyplot(fig)
+            fig.savefig(os.path.join(output_dir, 'marker_genes_heatmap.pdf'), bbox_inches='tight', dpi=300)
+            plt.close(fig)
             
-            # Save results
-            fig.savefig(os.path.join(output_dir, f'marker_genes_{groupby}.pdf'), bbox_inches='tight', dpi=300)
-            plt.close(fig)  # Close the figure to free memory
+            # Show detailed results table
+            st.subheader("Differential Expression Results")
+            results = pd.DataFrame()
+            for cluster in self.adata.obs['leiden'].unique():
+                cluster_results = sc.get.rank_genes_groups_df(
+                    self.adata,
+                    group=cluster,
+                    key='rank_genes_groups'
+                )
+                cluster_results['cluster'] = cluster
+                results = pd.concat([results, cluster_results])
             
-            # Save marker genes to CSV
-            marker_genes = pd.DataFrame({
-                group: self.adata.uns['rank_genes_groups']['names'][group][:25]
-                for group in self.adata.obs[groupby].unique()
-            })
-            marker_genes.to_csv(os.path.join(output_dir, f'marker_genes_{groupby}.csv'))
+            # Filter results based on fold change and p-value
+            results = results[
+                (abs(results['logfoldchanges']) >= min_fold_change) &
+                (results['pvals_adj'] <= pval_cutoff)
+            ]
+            
+            # Display results
+            st.dataframe(results)
+            
+            # Save results to CSV
+            results.to_csv(os.path.join(output_dir, 'differential_expression_results.csv'), index=False)
+            
+            # Show violin plots for top genes
+            st.subheader("Expression of Top Marker Genes")
+            for cluster in self.adata.obs['leiden'].unique():
+                cluster_results = sc.get.rank_genes_groups_df(
+                    self.adata,
+                    group=cluster,
+                    key='rank_genes_groups'
+                )
+                top_genes = cluster_results.head(3)['names'].tolist()
+                
+                for gene in top_genes:
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    sc.pl.violin(self.adata, gene, groupby='leiden', show=False, ax=ax)
+                    ax.set_title(f'Expression of {gene} in Cluster {cluster}', fontsize=14, fontweight='bold', pad=20)
+                    ax.set_xlabel('Cluster')
+                    ax.set_ylabel('Expression', fontsize=12)
+                    ax.tick_params(axis='both', which='major', labelsize=10)
+                    for spine in ax.spines.values():
+                        spine.set_linewidth(1.5)
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    fig.savefig(os.path.join(output_dir, f'violin_plot_{gene}_cluster_{cluster}.pdf'), bbox_inches='tight', dpi=300)
+                    plt.close(fig)
+            
+            st.success(f"Analysis completed! Results saved to {output_dir}")
             
         except Exception as e:
-            st.error(f"Error analyzing cell populations: {str(e)}")
-            st.write("\nAvailable observation columns:")
-            st.write(self.adata.obs.columns.tolist())
-            raise
+            st.error(f"Error during cell population analysis: {str(e)}")
     
     def show_gene_expression(
         self,
