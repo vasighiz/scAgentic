@@ -1,3 +1,9 @@
 git add .
 git commit -m "your commit message"
 git push
+
+
+git fetch origin 
+git reset --hard origin/master
+
+cmd /c ".\venv\Scripts\activate.bat && streamlit run app.py"

@@ -6,7 +6,10 @@ from functions import (
     analyze_qc_metrics,
     plot_qc_metrics,
     plot_pca_variance,
-    generate_qc_report
+    generate_qc_report,
+    preprocess_data,
+    generate_consolidated_report,
+    fetch_geo_metadata
 )
 import gzip
 import scanpy as sc
@@ -77,7 +80,36 @@ with tab1:
                 
                 # Extract accession number and subfolder from the first file name
                 file_name = uploaded_files[0].name
-                accession = file_name.split('_')[0]  # Assuming accession is the first part of the filename
+                # Try to detect GEO accession from folder name or file name
+                accession = None
+                if '_' in file_name:
+                    accession = file_name.split('_')[0]
+                elif '/' in file_name:
+                    accession = file_name.split('/')[0]
+                
+                # Validate if it's a GEO accession (GSE, GSM, or GDS format)
+                if accession and (accession.startswith(('GSE', 'GSM', 'GDS'))):
+                    st.session_state.geo_accession = accession
+                    st.session_state.geo_link = f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={accession}"
+                    
+                    # Fetch GEO metadata
+                    with st.spinner("Fetching study metadata from GEO..."):
+                        geo_metadata = fetch_geo_metadata(accession)
+                        st.session_state.study_info.update(geo_metadata)
+                        
+                        # Display metadata in an info box
+                        st.info("""
+                            **Study Metadata from GEO:**
+                            
+                            **Title:** {title}
+                            **Organism:** {organism}
+                            **Tissue:** {tissue}
+                            **Summary:** {summary}
+                            """.format(**geo_metadata))
+                else:
+                    st.warning("Could not detect GEO accession number from file names.")
+                    st.session_state.geo_accession = None
+                    st.session_state.geo_link = None
                 
                 # Get the subfolder path from the file name
                 subfolder = os.path.dirname(file_name)
@@ -171,6 +203,11 @@ with tab1:
                 
                 # Study information
                 st.header("2. Study Information")
+                
+                # Display GEO link if available
+                if hasattr(st.session_state, 'geo_link') and st.session_state.geo_link:
+                    st.markdown(f"**GEO Study Link:** [{st.session_state.geo_accession}]({st.session_state.geo_link})")
+                
                 st.session_state.study_info['study_name'] = st.text_input(
                     "Study Name",
                     help="Enter a descriptive name for your study"
@@ -253,12 +290,16 @@ with tab1:
                 if st.button("Run Preprocessing"):
                     with st.spinner("Preprocessing data..."):
                         try:
-                            # Create output directory
-                            output_dir = os.path.join(os.path.dirname(h5ad_path), 'analysis_results')
+                            # Create output directory with GEO accession
+                            output_dir = os.path.join(
+                                os.path.dirname(h5ad_path),
+                                f'analysis_results_{st.session_state.geo_accession}' if hasattr(st.session_state, 'geo_accession') and st.session_state.geo_accession else 'analysis_results'
+                            )
                             os.makedirs(output_dir, exist_ok=True)
                             
-                            # Run preprocessing
-                            success = st.session_state.agent.preprocess(
+                            # Preprocess data
+                            st.session_state.agent.adata = preprocess_data(
+                                st.session_state.agent.adata,
                                 min_genes=min_genes,
                                 min_cells=min_cells,
                                 max_percent_mt=max_percent_mt,
@@ -268,35 +309,49 @@ with tab1:
                                 resolution=resolution
                             )
                             
-                            if success:
-                                # Generate PCA variance plot
-                                plot_pca_variance(st.session_state.agent.adata, output_dir)
-                                
-                                # Generate QC report
-                                generate_qc_report(
-                                    st.session_state.agent.adata,
-                                    qc_stats,
-                                    output_dir,
-                                    st.session_state.study_info,
-                                    {
-                                        'min_genes': min_genes,
-                                        'min_cells': min_cells,
-                                        'max_percent_mt': max_percent_mt,
-                                        'n_top_genes': n_top_genes,
-                                        'n_pcs': n_pcs,
-                                        'n_neighbors': n_neighbors,
-                                        'resolution': resolution
-                                    }
+                            # Analyze QC metrics
+                            qc_stats = analyze_qc_metrics(st.session_state.agent.adata)
+                            
+                            # Generate consolidated report
+                            pdf_path = generate_consolidated_report(
+                                st.session_state.agent.adata,
+                                output_dir,
+                                {
+                                    **st.session_state.study_info,
+                                    'geo_link': st.session_state.geo_link if hasattr(st.session_state, 'geo_link') else '',
+                                    'geo_accession': st.session_state.geo_accession if hasattr(st.session_state, 'geo_accession') else ''
+                                },
+                                {
+                                    'min_genes': min_genes,
+                                    'min_cells': min_cells,
+                                    'max_percent_mt': max_percent_mt,
+                                    'n_top_genes': n_top_genes,
+                                    'n_pcs': n_pcs,
+                                    'n_neighbors': n_neighbors,
+                                    'resolution': resolution
+                                },
+                                qc_stats
+                            )
+                            
+                            # Save preprocessed data
+                            preprocessed_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(h5ad_path))[0]}_preprocessed.h5ad")
+                            st.session_state.agent.adata.write(preprocessed_path)
+                            
+                            st.success("Preprocessing completed successfully!")
+                            st.session_state.preprocessed = True
+                            
+                            # Add download button for the report
+                            with open(pdf_path, "rb") as file:
+                                st.download_button(
+                                    label="Download Analysis Report",
+                                    data=file,
+                                    file_name="consolidated_report.pdf",
+                                    mime="application/pdf"
                                 )
-                                
-                                st.success(f"Preprocessing completed! Results saved to {output_dir}")
-                                st.session_state.preprocessed = True  # Set preprocessing state in session
-                                st.session_state.agent.processed = True  # Set preprocessing state in agent
-                            else:
-                                st.error("Preprocessing failed. Please check the parameters and try again.")
                             
                         except Exception as e:
                             st.error(f"Error during preprocessing: {str(e)}")
+                            st.session_state.preprocessed = False
             
             except Exception as e:
                 st.error(f"Error processing files: {str(e)}")
@@ -335,55 +390,143 @@ with tab2:
                     st.subheader("UMAP Visualization")
                     color_by = st.selectbox(
                         "Color by",
-                        options=['leiden'] + list(st.session_state.agent.adata.obs.columns),
-                        help="Select a variable to color the UMAP plot by"
+                        options=['leiden', 'cell_type'] + list(st.session_state.agent.adata.obs.columns),
+                        help="Select a variable to color the UMAP plot"
                     )
-                    st.session_state.agent.generate_umap(color=color_by)
+                    
+                    if st.button("Generate UMAP"):
+                        with st.spinner("Generating UMAP plot..."):
+                            try:
+                                fig = plot_umap(
+                                    st.session_state.agent.adata,
+                                    color=color_by,
+                                    title=f"UMAP colored by {color_by}"
+                                )
+                                st.pyplot(fig)
+                                
+                                # Save UMAP plot
+                                output_dir = os.path.join(
+                                    os.path.dirname(h5ad_path),
+                                    f'analysis_results_{st.session_state.geo_accession}' if hasattr(st.session_state, 'geo_accession') and st.session_state.geo_accession else 'analysis_results'
+                                )
+                                fig.savefig(os.path.join(output_dir, 'umap.pdf'), bbox_inches='tight', dpi=300)
+                                plt.close(fig)
+                                
+                            except Exception as e:
+                                st.error(f"Error generating UMAP: {str(e)}")
                 
                 with subtab2:
                     # Cell population analysis
                     st.subheader("Cell Population Analysis")
                     
                     # Analysis parameters
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        n_genes = st.number_input(
-                            "Number of marker genes per cluster",
-                            min_value=1,
-                            max_value=50,
-                            value=25,
-                            help="Number of marker genes to show per cluster"
-                        )
-                        method = st.selectbox(
-                            "Statistical method",
-                            options=['wilcoxon', 't-test', 'logreg'],
-                            help="Statistical method for differential expression analysis"
-                        )
+                    n_genes = st.slider(
+                        "Number of marker genes per cluster",
+                        min_value=1,
+                        max_value=50,
+                        value=25,
+                        help="Number of marker genes to identify for each cluster"
+                    )
                     
-                    with col2:
-                        min_fold_change = st.number_input(
-                            "Minimum log fold change",
-                            min_value=0.0,
-                            max_value=5.0,
-                            value=0.25,
-                            help="Minimum log fold change for marker genes"
-                        )
-                        pval_cutoff = st.number_input(
-                            "P-value cutoff",
-                            min_value=0.0,
-                            max_value=1.0,
-                            value=0.05,
-                            help="P-value cutoff for marker genes"
-                        )
+                    method = st.selectbox(
+                        "Statistical method",
+                        options=['wilcoxon', 't-test', 'logreg'],
+                        help="Statistical method for differential expression analysis"
+                    )
+                    
+                    min_fold_change = st.slider(
+                        "Minimum log fold change",
+                        min_value=0.0,
+                        max_value=5.0,
+                        value=0.25,
+                        step=0.1,
+                        help="Minimum log fold change for marker genes"
+                    )
+                    
+                    pval_cutoff = st.slider(
+                        "P-value cutoff",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.05,
+                        step=0.01,
+                        help="P-value cutoff for statistical significance"
+                    )
                     
                     if st.button("Analyze Populations"):
                         with st.spinner("Analyzing cell populations..."):
-                            st.session_state.agent.analyze_cell_populations(
-                                n_genes=n_genes,
-                                method=method,
-                                min_fold_change=min_fold_change,
-                                pval_cutoff=pval_cutoff
-                            )
+                            try:
+                                # Create output directory with GEO accession
+                                output_dir = os.path.join(
+                                    os.path.dirname(h5ad_path),
+                                    f'analysis_results_{st.session_state.geo_accession}' if hasattr(st.session_state, 'geo_accession') and st.session_state.geo_accession else 'analysis_results'
+                                )
+                                os.makedirs(output_dir, exist_ok=True)
+                                
+                                # Perform differential expression analysis
+                                sc.tl.rank_genes_groups(
+                                    st.session_state.agent.adata,
+                                    'leiden',
+                                    method=method,
+                                    n_genes=n_genes
+                                )
+                                
+                                # Display results
+                                fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+                                sc.pl.rank_genes_groups(
+                                    st.session_state.agent.adata,
+                                    n_genes=n_genes,
+                                    sharey=False,
+                                    show=False,
+                                    ax=ax
+                                )
+                                plt.tight_layout()
+                                st.pyplot(fig)
+                                
+                                # Save heatmap
+                                fig.savefig(os.path.join(output_dir, 'marker_genes_heatmap.pdf'), bbox_inches='tight', dpi=300)
+                                plt.close(fig)
+                                
+                                # Display detailed results
+                                results = pd.DataFrame()
+                                for group in st.session_state.agent.adata.obs['leiden'].unique():
+                                    group_results = pd.DataFrame({
+                                        'gene': st.session_state.agent.adata.uns['rank_genes_groups']['names'][group],
+                                        'scores': st.session_state.agent.adata.uns['rank_genes_groups']['scores'][group],
+                                        'pvals': st.session_state.agent.adata.uns['rank_genes_groups']['pvals'][group],
+                                        'logfoldchanges': st.session_state.agent.adata.uns['rank_genes_groups']['logfoldchanges'][group],
+                                        'group': group
+                                    })
+                                    results = pd.concat([results, group_results])
+                                
+                                # Filter results
+                                results = results[
+                                    (results['logfoldchanges'].abs() >= min_fold_change) &
+                                    (results['pvals'] <= pval_cutoff)
+                                ]
+                                
+                                # Save results to CSV
+                                results.to_csv(os.path.join(output_dir, 'marker_genes.csv'), index=False)
+                                
+                                # Display results in the app
+                                st.dataframe(results)
+                                
+                                # Generate violin plots for top genes
+                                top_genes = results.groupby('group').head(5)['gene'].unique()
+                                for gene in top_genes:
+                                    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
+                                    sc.pl.violin(
+                                        st.session_state.agent.adata,
+                                        gene,
+                                        groupby='leiden',
+                                        show=False,
+                                        ax=ax
+                                    )
+                                    plt.tight_layout()
+                                    fig.savefig(os.path.join(output_dir, f'violin_{gene}.pdf'), bbox_inches='tight', dpi=300)
+                                    plt.close(fig)
+                                
+                            except Exception as e:
+                                st.error(f"Error analyzing cell populations: {str(e)}")
                 
                 with subtab3:
                     # Gene expression visualization
