@@ -24,6 +24,110 @@ import requests
 import json
 from typing import List, Dict, Any
 
+def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
+    """
+    Process user query using local LLM (Mistral via Ollama).
+    
+    Args:
+        query: User's natural language query
+        available_functions: List of available function names
+        
+    Returns:
+        Dictionary containing interpreted query parameters
+    """
+    try:
+        # Prepare the prompt for the LLM
+        prompt = f"""
+        You are a helpful assistant for single-cell RNA-seq analysis. 
+        Available functions: {', '.join(available_functions)}
+        
+        User query: {query}
+        
+        Please interpret this query and return a JSON object with:
+        1. function_name: The most appropriate function to call
+        2. parameters: Any relevant parameters extracted from the query
+        3. confidence: A score between 0 and 1 indicating how confident you are in the interpretation
+        
+        Example response:
+        {{
+            "function_name": "plot_umap",
+            "parameters": {{"color": "leiden"}},
+            "confidence": 0.9
+        }}
+        """
+        
+        # Call Ollama API (assuming it's running locally)
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json={
+                'model': 'mistral',
+                'prompt': prompt,
+                'stream': False
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            try:
+                # Parse the LLM's response
+                interpretation = json.loads(result['response'])
+                return interpretation
+            except json.JSONDecodeError:
+                return {
+                    'function_name': None,
+                    'parameters': {},
+                    'confidence': 0.0
+                }
+        else:
+            return {
+                'function_name': None,
+                'parameters': {},
+                'confidence': 0.0
+            }
+            
+    except Exception as e:
+        print(f"Error in LLM processing: {str(e)}")
+        return {
+            'function_name': None,
+            'parameters': {},
+            'confidence': 0.0
+        }
+
+def execute_interpreted_query(interpretation: Dict[str, Any], adata: sc.AnnData) -> Any:
+    """
+    Execute the interpreted query using the appropriate function.
+    
+    Args:
+        interpretation: Dictionary containing interpreted query parameters
+        adata: AnnData object containing the data
+        
+    Returns:
+        Result of the function execution
+    """
+    if interpretation['confidence'] < 0.5:
+        return None
+        
+    function_name = interpretation['function_name']
+    parameters = interpretation['parameters']
+    
+    # Map function names to actual functions
+    function_map = {
+        'plot_umap': plot_umap,
+        'plot_pca': plot_pca,
+        'analyze_qc_metrics': analyze_qc_metrics,
+        'plot_qc_metrics': plot_qc_metrics,
+        'plot_pca_variance': plot_pca_variance
+    }
+    
+    if function_name in function_map:
+        try:
+            # Add adata as the first parameter
+            return function_map[function_name](adata, **parameters)
+        except Exception as e:
+            print(f"Error executing {function_name}: {str(e)}")
+            return None
+    return None
+
 # Set page config
 st.set_page_config(
     page_title="Single-Cell RNA-seq Analysis",
@@ -627,108 +731,4 @@ with tab3:
                 st.session_state.chat_history.append({
                     "role": "assistant",
                     "content": f"I encountered an error: {str(e)}"
-                })
-
-def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
-    """
-    Process user query using local LLM (Mistral via Ollama).
-    
-    Args:
-        query: User's natural language query
-        available_functions: List of available function names
-        
-    Returns:
-        Dictionary containing interpreted query parameters
-    """
-    try:
-        # Prepare the prompt for the LLM
-        prompt = f"""
-        You are a helpful assistant for single-cell RNA-seq analysis. 
-        Available functions: {', '.join(available_functions)}
-        
-        User query: {query}
-        
-        Please interpret this query and return a JSON object with:
-        1. function_name: The most appropriate function to call
-        2. parameters: Any relevant parameters extracted from the query
-        3. confidence: A score between 0 and 1 indicating how confident you are in the interpretation
-        
-        Example response:
-        {{
-            "function_name": "plot_umap",
-            "parameters": {{"color": "leiden"}},
-            "confidence": 0.9
-        }}
-        """
-        
-        # Call Ollama API (assuming it's running locally)
-        response = requests.post(
-            'http://localhost:11434/api/generate',
-            json={
-                'model': 'mistral',
-                'prompt': prompt,
-                'stream': False
-            }
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            try:
-                # Parse the LLM's response
-                interpretation = json.loads(result['response'])
-                return interpretation
-            except json.JSONDecodeError:
-                return {
-                    'function_name': None,
-                    'parameters': {},
-                    'confidence': 0.0
-                }
-        else:
-            return {
-                'function_name': None,
-                'parameters': {},
-                'confidence': 0.0
-            }
-            
-    except Exception as e:
-        print(f"Error in LLM processing: {str(e)}")
-        return {
-            'function_name': None,
-            'parameters': {},
-            'confidence': 0.0
-        }
-
-def execute_interpreted_query(interpretation: Dict[str, Any], adata: sc.AnnData) -> Any:
-    """
-    Execute the interpreted query using the appropriate function.
-    
-    Args:
-        interpretation: Dictionary containing interpreted query parameters
-        adata: AnnData object containing the data
-        
-    Returns:
-        Result of the function execution
-    """
-    if interpretation['confidence'] < 0.5:
-        return None
-        
-    function_name = interpretation['function_name']
-    parameters = interpretation['parameters']
-    
-    # Map function names to actual functions
-    function_map = {
-        'plot_umap': plot_umap,
-        'plot_pca': plot_pca,
-        'analyze_qc_metrics': analyze_qc_metrics,
-        'plot_qc_metrics': plot_qc_metrics,
-        'plot_pca_variance': plot_pca_variance
-    }
-    
-    if function_name in function_map:
-        try:
-            # Add adata as the first parameter
-            return function_map[function_name](adata, **parameters)
-        except Exception as e:
-            print(f"Error executing {function_name}: {str(e)}")
-            return None
-    return None 
+                }) 
