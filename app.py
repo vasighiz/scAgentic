@@ -9,7 +9,9 @@ from functions import (
     generate_qc_report,
     preprocess_data,
     generate_consolidated_report,
-    fetch_geo_metadata
+    fetch_geo_metadata,
+    plot_pca,
+    plot_umap
 )
 import gzip
 import scanpy as sc
@@ -18,6 +20,9 @@ import numpy as np
 import tempfile
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import json
+from typing import List, Dict, Any
 
 # Set page config
 st.set_page_config(
@@ -542,6 +547,18 @@ with tab3:
     # Chat interface
     st.title("Chat Interface")
     
+    # Display example prompts
+    st.info("""
+        **Try asking questions like:**
+        
+        - "Show me the UMAP colored by clusters"
+        - "What are the top differentially expressed genes in cluster 1?"
+        - "Plot PDCD1 expression on UMAP"
+        - "Summarize cell type distribution"
+        - "Show me the PCA plot"
+        - "What's the distribution of genes per cell?"
+    """)
+    
     # Display chat history
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
@@ -562,33 +579,156 @@ with tab3:
                     st.error("Please upload a dataset first!")
                     st.stop()
                 
-                # Process different types of queries
-                if "umap" in prompt.lower():
-                    # Extract color parameter if specified
-                    color = None
-                    if "color by" in prompt.lower():
-                        color = prompt.lower().split("color by")[-1].strip()
-                    st.session_state.agent.generate_umap(color=color)
+                # List of available functions
+                available_functions = [
+                    'plot_umap',
+                    'plot_pca',
+                    'analyze_qc_metrics',
+                    'plot_qc_metrics',
+                    'plot_pca_variance'
+                ]
                 
-                elif "compare" in prompt.lower() and "populations" in prompt.lower():
-                    st.session_state.agent.analyze_cell_populations()
+                # Process query with LLM
+                interpretation = process_query_with_llm(prompt, available_functions)
                 
-                elif "expression" in prompt.lower():
-                    # Extract gene name if specified
-                    gene = st.session_state.agent.get_available_genes()[0]  # Default to first gene
-                    st.session_state.agent.show_gene_expression(gene=gene)
-                
+                if interpretation['confidence'] >= 0.5 and interpretation['function_name']:
+                    # Execute the interpreted query
+                    result = execute_interpreted_query(interpretation, st.session_state.agent.adata)
+                    
+                    if result is not None:
+                        # Display the result
+                        if isinstance(result, plt.Figure):
+                            st.pyplot(result)
+                        elif isinstance(result, pd.DataFrame):
+                            st.dataframe(result)
+                        else:
+                            st.write(result)
+                            
+                        # Add success message to chat history
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": "I've processed your request. Here's what I found."
+                        })
+                    else:
+                        st.error("I couldn't execute that query. Please try rephrasing or use one of the example prompts above.")
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": "I couldn't execute that query. Please try rephrasing or use one of the example prompts above."
+                        })
                 else:
-                    st.write("I can help you with:")
-                    st.write("- Generating UMAP plots (try asking about UMAP)")
-                    st.write("- Comparing cell populations (try asking about population comparison)")
-                    st.write("- Analyzing gene expression (try asking about gene expression)")
+                    st.error("I couldn't match your question to a known function. Try rephrasing or use one of the example prompts above.")
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": "I couldn't match your question to a known function. Try rephrasing or use one of the example prompts above."
+                    })
                     
             except Exception as e:
                 st.error(f"Error processing query: {str(e)}")
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": f"I encountered an error: {str(e)}"
+                })
+
+def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
+    """
+    Process user query using local LLM (Mistral via Ollama).
+    
+    Args:
+        query: User's natural language query
+        available_functions: List of available function names
+        
+    Returns:
+        Dictionary containing interpreted query parameters
+    """
+    try:
+        # Prepare the prompt for the LLM
+        prompt = f"""
+        You are a helpful assistant for single-cell RNA-seq analysis. 
+        Available functions: {', '.join(available_functions)}
+        
+        User query: {query}
+        
+        Please interpret this query and return a JSON object with:
+        1. function_name: The most appropriate function to call
+        2. parameters: Any relevant parameters extracted from the query
+        3. confidence: A score between 0 and 1 indicating how confident you are in the interpretation
+        
+        Example response:
+        {{
+            "function_name": "plot_umap",
+            "parameters": {{"color": "leiden"}},
+            "confidence": 0.9
+        }}
+        """
+        
+        # Call Ollama API (assuming it's running locally)
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json={
+                'model': 'mistral',
+                'prompt': prompt,
+                'stream': False
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            try:
+                # Parse the LLM's response
+                interpretation = json.loads(result['response'])
+                return interpretation
+            except json.JSONDecodeError:
+                return {
+                    'function_name': None,
+                    'parameters': {},
+                    'confidence': 0.0
+                }
+        else:
+            return {
+                'function_name': None,
+                'parameters': {},
+                'confidence': 0.0
+            }
             
-            # Add assistant response to chat history
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": "I've processed your request. Let me know if you need anything else!"
-            }) 
+    except Exception as e:
+        print(f"Error in LLM processing: {str(e)}")
+        return {
+            'function_name': None,
+            'parameters': {},
+            'confidence': 0.0
+        }
+
+def execute_interpreted_query(interpretation: Dict[str, Any], adata: sc.AnnData) -> Any:
+    """
+    Execute the interpreted query using the appropriate function.
+    
+    Args:
+        interpretation: Dictionary containing interpreted query parameters
+        adata: AnnData object containing the data
+        
+    Returns:
+        Result of the function execution
+    """
+    if interpretation['confidence'] < 0.5:
+        return None
+        
+    function_name = interpretation['function_name']
+    parameters = interpretation['parameters']
+    
+    # Map function names to actual functions
+    function_map = {
+        'plot_umap': plot_umap,
+        'plot_pca': plot_pca,
+        'analyze_qc_metrics': analyze_qc_metrics,
+        'plot_qc_metrics': plot_qc_metrics,
+        'plot_pca_variance': plot_pca_variance
+    }
+    
+    if function_name in function_map:
+        try:
+            # Add adata as the first parameter
+            return function_map[function_name](adata, **parameters)
+        except Exception as e:
+            print(f"Error executing {function_name}: {str(e)}")
+            return None
+    return None 
