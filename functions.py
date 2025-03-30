@@ -11,6 +11,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 import requests
 from bs4 import BeautifulSoup
 import re
+import scipy.sparse
+import subprocess
+from datetime import datetime
 
 def convert_10x_to_h5ad(
     mtx_path: str,
@@ -91,85 +94,131 @@ def load_data(file_path: str) -> sc.AnnData:
 
 def preprocess_data(
     adata: sc.AnnData,
-    min_genes: int = 200,
-    min_cells: int = 3,
-    max_percent_mt: float = 20.0,
+    min_genes: int = None,
+    min_cells: int = None,
+    max_percent_mt: float = None,
     n_top_genes: int = 2000,
     n_pcs: int = 50,
     n_neighbors: int = 15,
-    resolution: float = 0.5
-) -> sc.AnnData:
+    resolution: float = 0.5,
+    batch_key: str = None
+) -> Tuple[sc.AnnData, Dict[str, plt.Figure]]:
     """
-    Preprocess single-cell data using Scanpy pipeline.
+    Preprocess single-cell data using Scanpy pipeline, following the official tutorial.
     
     Args:
-        adata: AnnData object
-        min_genes: Minimum number of genes expressed in a cell
-        min_cells: Minimum number of cells expressing a gene
+        adata: AnnData object containing the data
+        min_genes: Minimum number of genes per cell
+        min_cells: Minimum number of cells per gene
         max_percent_mt: Maximum percentage of mitochondrial genes
-        n_top_genes: Number of highly variable genes to select
-        n_pcs: Number of principal components for PCA
-        n_neighbors: Number of neighbors for UMAP
+        n_top_genes: Number of highly variable genes
+        n_pcs: Number of principal components
+        n_neighbors: Number of neighbors for computing the neighborhood graph
         resolution: Resolution for Leiden clustering
+        batch_key: Key in adata.obs for batch information
         
     Returns:
-        Preprocessed AnnData object
+        Tuple containing:
+        - Preprocessed AnnData object
+        - Dictionary of generated figures
     """
-    try:
-        # First calculate basic QC metrics
-        sc.pp.calculate_qc_metrics(adata, inplace=True)
-        
-        # Detect mitochondrial genes if not already present
-        if 'mito' not in adata.var.columns:
-            # Convert var_names to string if they're not already
-            var_names = adata.var_names.astype(str)
-            adata.var['mito'] = var_names.str.startswith(('MT-', 'mt-', 'M-', 'm-'))
-        
-        # Calculate mitochondrial percentage
-        sc.pp.calculate_qc_metrics(adata, qc_vars=['mito'], inplace=True)
-        
-        # Filter cells and genes
-        sc.pp.filter_cells(adata, min_genes=min_genes)
-        sc.pp.filter_genes(adata, min_cells=min_cells)
-        
-        # Filter cells based on mitochondrial percentage
-        if 'pct_counts_mt' in adata.obs.columns:
-            adata = adata[adata.obs['pct_counts_mt'] < max_percent_mt, :]
-        else:
-            print("Warning: Could not find mitochondrial percentage column. Skipping mitochondrial filtering.")
-        
-        # Normalize data
-        sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
-        
-        # Find highly variable genes
-        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
-        adata = adata[:, adata.var.highly_variable]
-        
-        # Scale data
-        sc.pp.scale(adata, max_value=10)
-        
-        # Run PCA
-        sc.tl.pca(adata, n_comps=n_pcs, mask_var="highly_variable")
-        
-        # Compute neighborhood graph
-        sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs)
-        
-        # Run UMAP
-        sc.tl.umap(adata)
-        
-        # Run Leiden clustering
-        sc.tl.leiden(adata, resolution=resolution)
-        
-        return adata
-        
-    except Exception as e:
-        print(f"Error during preprocessing: {str(e)}")
-        print("\nAvailable columns in adata.obs:")
-        print(adata.obs.columns.tolist())
-        print("\nAvailable columns in adata.var:")
-        print(adata.var.columns.tolist())
-        raise
+    # Make a copy of the AnnData object
+    adata = adata.copy()
+    figures = {}  # Store figures separately
+    
+    # Calculate QC metrics
+    adata.var['mt'] = adata.var_names.str.startswith('MT-')
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+    
+    # Generate highest expressed genes plot
+    plt.figure(figsize=(8, 6))
+    sc.pl.highest_expr_genes(adata, n_top=20, show=False)
+    figures['highest_expr_genes'] = plt.gcf()
+    plt.close()
+    
+    # Store QC metrics before filtering as numpy arrays
+    adata.uns['qc_metrics_before'] = {
+        'n_genes_by_counts': adata.obs['n_genes_by_counts'].to_numpy(),
+        'total_counts': adata.obs['total_counts'].to_numpy(),
+        'pct_counts_mt': adata.obs['pct_counts_mt'].to_numpy()
+    }
+    
+    # Auto-detect QC thresholds if not provided
+    if min_genes is None:
+        min_genes = int(np.percentile(adata.obs['n_genes_by_counts'], 5))
+    if min_cells is None:
+        min_cells = 3
+    if max_percent_mt is None:
+        max_percent_mt = np.percentile(adata.obs['pct_counts_mt'], 95)
+    
+    # Filter cells
+    sc.pp.filter_cells(adata, min_genes=min_genes)
+    
+    # Filter genes
+    sc.pp.filter_genes(adata, min_cells=min_cells)
+    
+    # Filter cells based on mitochondrial percentage
+    adata = adata[adata.obs['pct_counts_mt'] < max_percent_mt, :]
+    
+    # Store raw counts
+    adata.layers['counts'] = adata.X.copy()
+    
+    # Normalize total per cell
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    
+    # Log transform
+    sc.pp.log1p(adata)
+    
+    # Store normalized and log-transformed data
+    adata.layers['log1p'] = adata.X.copy()
+    
+    # Identify highly variable genes
+    sc.pp.highly_variable_genes(
+        adata,
+        n_top_genes=n_top_genes,
+        batch_key=batch_key,
+        flavor='seurat',
+        subset=True
+    )
+    
+    # Generate HVG plot but don't store it in adata
+    sc.pl.highly_variable_genes(adata, show=False)
+    figures['highly_variable_genes'] = plt.gcf()
+    plt.close()
+    
+    # Scale data
+    sc.pp.scale(adata, max_value=10)
+    
+    # Run PCA
+    sc.tl.pca(adata, svd_solver='arpack', use_highly_variable=True, n_comps=n_pcs)
+    
+    # Generate PCA variance ratio plot but don't store it in adata
+    sc.pl.pca_variance_ratio(adata, n_pcs=50, show=False)
+    figures['pca_variance'] = plt.gcf()
+    plt.close()
+    
+    # Compute neighborhood graph
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs)
+    
+    # Run UMAP
+    sc.tl.umap(adata)
+    
+    # Run Leiden clustering
+    sc.tl.leiden(adata, resolution=resolution)
+    
+    # Store preprocessing parameters
+    adata.uns['preprocessing_params'] = {
+        'min_genes': int(min_genes),
+        'min_cells': int(min_cells),
+        'max_percent_mt': float(max_percent_mt),
+        'n_top_genes': int(n_top_genes),
+        'n_pcs': int(n_pcs),
+        'n_neighbors': int(n_neighbors),
+        'resolution': float(resolution),
+        'batch_key': batch_key
+    }
+    
+    return adata, figures
 
 def plot_umap(
     adata: sc.AnnData,
@@ -455,82 +504,60 @@ def analyze_qc_metrics(adata: sc.AnnData) -> Dict[str, Any]:
         print(adata.obs.columns.tolist())
         raise
 
-def plot_qc_metrics(
-    adata: sc.AnnData,
-    qc_stats: Dict[str, Any],
-    output_dir: str,
-    dpi: int = 150
-) -> None:
-    """Generate comprehensive QC plots."""
-    # Set style
-    plt.style.use('default')
+def plot_qc_metrics(adata: sc.AnnData) -> plt.Figure:
+    """
+    Plot QC metrics on UMAP.
     
-    # 1. Genes per cell histogram
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)  # Consistent size
-    sns.histplot(qc_stats['genes_per_cell'], bins=50, ax=ax)
-    ax.set_title('Distribution of Genes per Cell', fontsize=12, fontweight='bold', pad=10)
-    ax.set_xlabel('Number of Genes', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.5)
-    plt.grid(True, linestyle='--', alpha=0.3, color='gray')
+    Args:
+        adata: AnnData object containing the data
+        
+    Returns:
+        Matplotlib figure with QC metric plots
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(15, 15))
+    axes = axes.ravel()
+    
+    # Plot UMAP colored by QC metrics
+    metrics = ['n_genes_by_counts', 'total_counts', 'pct_counts_mt']
+    for i, metric in enumerate(metrics):
+        if metric in adata.obs.columns:
+            sc.pl.umap(
+                adata,
+                color=metric,
+                show=False,
+                ax=axes[i],
+                title=f'UMAP colored by {metric}'
+            )
+    
+    # Plot UMAP colored by clusters
+    sc.pl.umap(
+        adata,
+        color='leiden',
+        show=False,
+        ax=axes[3],
+        title='UMAP colored by clusters'
+    )
+    
     plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, 'genes_per_cell.pdf'), bbox_inches='tight', dpi=300)
-    plt.close(fig)
-    
-    # 2. Total counts histogram
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)  # Consistent size
-    sns.histplot(qc_stats['total_counts'], bins=50, ax=ax)
-    ax.set_title('Distribution of Total Counts per Cell', fontsize=12, fontweight='bold', pad=10)
-    ax.set_xlabel('Total Counts', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.5)
-    plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-    plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, 'total_counts.pdf'), bbox_inches='tight', dpi=300)
-    plt.close(fig)
-    
-    # 3. Mitochondrial percentage plot (if available)
-    if qc_stats['mito_percent'] is not None:
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)  # Consistent size
-        sns.histplot(qc_stats['mito_percent'], bins=50, ax=ax)
-        ax.set_title('Distribution of Mitochondrial Percentage', fontsize=12, fontweight='bold', pad=10)
-        ax.set_xlabel('Mitochondrial Percentage', fontsize=10, fontweight='bold')
-        ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-        ax.tick_params(axis='both', which='major', labelsize=8)
-        for spine in ax.spines.values():
-            spine.set_linewidth(1.5)
-        plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-        plt.tight_layout()
-        fig.savefig(os.path.join(output_dir, 'mito_percentage.pdf'), bbox_inches='tight', dpi=300)
-        plt.close(fig)
-    
-    # 4. Genes vs Counts scatter plot
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)  # Consistent size
-    ax.scatter(qc_stats['total_counts'], qc_stats['genes_per_cell'], alpha=0.5)
-    ax.set_title('Genes vs Total Counts', fontsize=12, fontweight='bold', pad=10)
-    ax.set_xlabel('Total Counts', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Number of Genes', fontsize=10, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.5)
-    plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-    plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, 'genes_vs_counts.pdf'), bbox_inches='tight', dpi=300)
-    plt.close(fig)
+    return fig
 
-def plot_pca_variance(adata: sc.AnnData, output_dir: str, dpi: int = 150) -> None:
-    """Plot PCA variance explained."""
+def plot_pca_variance(adata: sc.AnnData) -> plt.Figure:
+    """
+    Plot PCA variance explained.
+    
+    Args:
+        adata: AnnData object containing the data
+        
+    Returns:
+        Matplotlib figure with PCA variance plot
+    """
     if 'pca' not in adata.uns:
-        return
+        raise ValueError("PCA not found. Please run PCA first.")
     
     var_ratio = adata.uns['pca']['variance_ratio']
     cumsum = np.cumsum(var_ratio)
     
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)  # Consistent size
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.plot(range(1, len(var_ratio) + 1), cumsum, 'b-', label='Cumulative')
     ax.plot(range(1, len(var_ratio) + 1), var_ratio, 'r-', label='Individual')
     ax.set_title('PCA Variance Explained', fontsize=12, fontweight='bold', pad=10)
@@ -542,136 +569,316 @@ def plot_pca_variance(adata: sc.AnnData, output_dir: str, dpi: int = 150) -> Non
         spine.set_linewidth(1.5)
     plt.grid(True, linestyle='--', alpha=0.3, color='gray')
     plt.tight_layout()
-    fig.savefig(os.path.join(output_dir, 'pca_variance.pdf'), bbox_inches='tight', dpi=300)
-    plt.close(fig)
+    
+    return fig
 
-def generate_qc_report(
+def generate_latex_report(
     adata: sc.AnnData,
-    qc_stats: Dict[str, Any],
     output_dir: str,
     study_info: Dict[str, str],
-    params: Dict[str, Any]
-) -> None:
-    """Generate a comprehensive QC report in PDF format."""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    params: Dict[str, Any],
+    qc_stats: Dict[str, Any],
+    figures: Optional[Dict[str, plt.Figure]] = None,
+    runtime: float = None
+) -> str:
+    """
+    Generate a LaTeX report with all analysis results.
     
-    # Create PDF document
-    doc = SimpleDocTemplate(
-        os.path.join(output_dir, 'qc_report.pdf'),
-        pagesize=letter,
-        rightMargin=72,
-        leftMargin=72,
-        topMargin=72,
-        bottomMargin=72
+    Args:
+        adata: AnnData object containing the data
+        output_dir: Directory to save the report
+        study_info: Dictionary containing study information
+        params: Dictionary containing analysis parameters
+        qc_stats: Dictionary containing QC statistics
+        figures: Optional dictionary of pre-generated figures from preprocessing
+        runtime: Total runtime of the analysis in seconds
+        
+    Returns:
+        Path to the generated PDF report
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save figures as PNG files
+    figure_paths = {}
+    if figures is not None:
+        for name, fig in figures.items():
+            png_path = os.path.join(output_dir, f"{name}.png")
+            fig.savefig(png_path, dpi=300, bbox_inches='tight')
+            figure_paths[name] = png_path
+            plt.close(fig)
+    
+    # Generate LaTeX content
+    latex_content = f"""
+\\documentclass[12pt]{{article}}
+\\usepackage[utf8]{{inputenc}}
+\\usepackage{{graphicx}}
+\\usepackage{{booktabs}}
+\\usepackage{{multirow}}
+\\usepackage{{amsmath}}
+\\usepackage{{hyperref}}
+\\usepackage{{geometry}}
+\\usepackage{{fancyhdr}}
+\\usepackage{{caption}}
+\\usepackage{{subcaption}}
+
+% Page geometry
+\\geometry{{a4paper, margin=1in}}
+
+% Header and footer
+\\pagestyle{{fancy}}
+\\fancyhf{{}}
+\\fancyhead[L]{{scAgentic}}
+\\fancyhead[R]{{Single-Cell Analysis Report}}
+\\fancyfoot[C]{{Page \\thepage}}
+
+% Document info
+\\title{{Single-Cell RNA-seq Analysis Report}}
+\\author{{Akram Vasighizaker}}
+\\date{{{datetime.now().strftime('%B %d, %Y')}}}
+
+% Begin document
+\\begin{{document}}
+
+% Title page
+\\begin{{titlepage}}
+    \\centering
+    \\vspace*{{2cm}}
+    
+    % Logo if available
+    \\IfFileExists{{scagentic_logo.png}}{{
+        \\includegraphics[width=0.3\\textwidth]{{scagentic_logo.png}}
+        \\vspace{{1cm}}
+    }}{{}}
+    
+    \\Huge\\textbf{{Single-Cell RNA-seq Analysis Report}}\\\\[1cm]
+    
+    \\Large\\textbf{{Akram Vasighizaker}}\\\\[0.5cm]
+    
+    \\large{{{datetime.now().strftime('%B %d, %Y')}}}\\\\[0.5cm]
+    
+    \\large{{GEO Accession: {study_info.get('geo_accession', 'Not available')}}}\\\\[2cm]
+    
+    \\vfill
+    \\large{{Generated by scAgentic - AI-Powered Single-Cell Analysis}}
+\\end{{titlepage}}
+
+% Table of Contents
+\\tableofcontents
+\\newpage
+
+% Study Information
+\\section{{Study Information}}
+\\subsection{{Metadata}}
+\\begin{{table}}[h]
+    \\centering
+    \\begin{{tabular}}{{ll}}
+        \\toprule
+        \\textbf{{Field}} & \\textbf{{Value}} \\\\
+        \\midrule
+        Title & {study_info.get('title', 'Not available')} \\\\
+        Organism & {study_info.get('organism', 'Not available')} \\\\
+        Tissue & {study_info.get('tissue', 'Not available')} \\\\
+        \\bottomrule
+    \\end{{tabular}}
+    \\caption{{Study metadata from GEO}}
+\\end{{table}}
+
+\\subsection{{Study Summary}}
+{study_info.get('summary', 'Not available')}
+
+% Analysis Summary
+\\section{{Analysis Summary}}
+\\begin{{table}}[h]
+    \\centering
+    \\begin{{tabular}}{{ll}}
+        \\toprule
+        \\textbf{{Metric}} & \\textbf{{Value}} \\\\
+        \\midrule
+        Total Cells & {adata.n_obs:,} \\\\
+        Total Genes & {adata.n_vars:,} \\\\
+        Number of Clusters & {len(adata.obs['leiden'].unique())} \\\\
+        Runtime & {runtime:.2f} seconds \\\\
+        \\bottomrule
+    \\end{{tabular}}
+    \\caption{{Summary of analysis results}}
+\\end{{table}}
+
+\\subsection{{Analysis Parameters}}
+\\begin{{table}}[h]
+    \\centering
+    \\begin{{tabular}}{{ll}}
+        \\toprule
+        \\textbf{{Parameter}} & \\textbf{{Value}} \\\\
+        \\midrule
+        Min Genes per Cell & {params.get('min_genes', 'N/A')} \\\\
+        Min Cells per Gene & {params.get('min_cells', 'N/A')} \\\\
+        Max \% MT & {params.get('max_percent_mt', 'N/A')} \\\\
+        Top Genes & {params.get('n_top_genes', 'N/A')} \\\\
+        Number of PCs & {params.get('n_pcs', 'N/A')} \\\\
+        Resolution & {params.get('resolution', 'N/A')} \\\\
+        \\bottomrule
+    \\end{{tabular}}
+    \\caption{{Analysis parameters used}}
+\\end{{table}}
+
+% Quality Control
+\\section{{Quality Control}}
+\\subsection{{Highest Expressed Genes}}
+\\IfFileExists{{{figure_paths.get('highest_expr_genes', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('highest_expr_genes', '')}}}
+        \\caption{{Top 20 genes by expression level across all cells}}
+    \\end{{figure}}
+}}{{}}
+
+\\subsection{{QC Distributions}}
+\\IfFileExists{{{figure_paths.get('qc_distributions', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('qc_distributions', '')}}}
+        \\caption{{Distribution of key QC metrics including number of genes per cell, total counts, and mitochondrial percentage}}
+    \\end{{figure}}
+}}{{}}
+
+% Feature Selection
+\\section{{Feature Selection}}
+\\subsection{{Highly Variable Genes}}
+\\IfFileExists{{{figure_paths.get('highly_variable_genes', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('highly_variable_genes', '')}}}
+        \\caption{{Selection of highly variable genes based on normalized dispersion}}
+    \\end{{figure}}
+}}{{}}
+
+% Dimensionality Reduction
+\\section{{Dimensionality Reduction}}
+\\subsection{{PCA Variance Ratio}}
+\\IfFileExists{{{figure_paths.get('pca_variance', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('pca_variance', '')}}}
+        \\caption{{Variance explained by each principal component}}
+    \\end{{figure}}
+}}{{}}
+
+\\subsection{{PCA Visualization}}
+\\IfFileExists{{{figure_paths.get('pca', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('pca', '')}}}
+        \\caption{{PCA visualization showing cell clusters in reduced dimensional space}}
+    \\end{{figure}}
+}}{{}}
+
+\\subsection{{UMAP Visualization}}
+\\IfFileExists{{{figure_paths.get('umap', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('umap', '')}}}
+        \\caption{{UMAP visualization of cell clusters}}
+    \\end{{figure}}
+}}{{}}
+
+% Differential Expression
+\\section{{Differential Expression Analysis}}
+\\IfFileExists{{{figure_paths.get('de', '')}}}{{
+    \\begin{{figure}}[h]
+        \\centering
+        \\includegraphics[width=0.8\\textwidth]{{{figure_paths.get('de', '')}}}
+        \\caption{{Top differentially expressed genes for each cluster}}
+    \\end{{figure}}
+}}{{}}
+
+% Appendix
+\\appendix
+\\section{{Top Differentially Expressed Genes by Cluster}}
+"""
+    
+    # Add DE genes table if available
+    if 'rank_genes_groups' in adata.uns:
+        for cluster in adata.obs['leiden'].unique():
+            latex_content += f"""
+\\subsection{{Cluster {cluster}}}
+\\begin{{table}}[h]
+    \\centering
+    \\begin{{tabular}}{{lrr}}
+        \\toprule
+        \\textbf{{Gene}} & \\textbf{{Score}} & \\textbf{{P-value}} \\\\
+        \\midrule
+"""
+            for i in range(20):
+                gene = adata.uns['rank_genes_groups']['names'][cluster][i]
+                score = adata.uns['rank_genes_groups']['scores'][cluster][i]
+                pval = adata.uns['rank_genes_groups']['pvals'][cluster][i]
+                latex_content += f"        {gene} & {score:.2f} & {pval:.2e} \\\\\n"
+            
+            latex_content += """
+        \\bottomrule
+    \\end{tabular}
+    \\caption{Top 20 differentially expressed genes}
+\\end{table}
+"""
+    
+    latex_content += """
+\\end{document}
+"""
+    
+    # Save LaTeX file
+    tex_path = os.path.join(output_dir, 'report.tex')
+    with open(tex_path, 'w') as f:
+        f.write(latex_content)
+    
+    # Compile LaTeX to PDF
+    try:
+        subprocess.run(['pdflatex', '-interaction=nonstopmode', tex_path], 
+                      cwd=output_dir, check=True)
+        subprocess.run(['pdflatex', '-interaction=nonstopmode', tex_path], 
+                      cwd=output_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error compiling LaTeX: {e}")
+        raise
+    
+    # Return path to the generated PDF
+    return os.path.join(output_dir, 'report.pdf')
+
+def generate_consolidated_report(
+    adata: sc.AnnData,
+    output_dir: str,
+    study_info: Dict[str, str],
+    params: Dict[str, Any],
+    qc_stats: Dict[str, Any],
+    figures: Optional[Dict[str, plt.Figure]] = None,
+    runtime: float = None
+) -> str:
+    """
+    Generate a consolidated PDF report with all analysis results.
+    
+    Args:
+        adata: AnnData object containing the data
+        output_dir: Directory to save the report
+        study_info: Dictionary containing study information
+        params: Dictionary containing analysis parameters
+        qc_stats: Dictionary containing QC statistics
+        figures: Optional dictionary of pre-generated figures from preprocessing
+        runtime: Total runtime of the analysis in seconds
+        
+    Returns:
+        Path to the generated PDF report
+    """
+    from latex_report import generate_latex_report
+    
+    return generate_latex_report(
+        adata=adata,
+        output_dir=output_dir,
+        study_info=study_info,
+        params=params,
+        qc_stats=qc_stats,
+        figures=figures,
+        runtime=runtime
     )
-    
-    # Styles
-    styles = getSampleStyleSheet()
-    title_style = styles['Heading1']
-    heading_style = styles['Heading2']
-    normal_style = styles['Normal']
-    
-    # Content
-    story = []
-    
-    # Title
-    story.append(Paragraph("Single-Cell RNA-seq Quality Control Report", title_style))
-    story.append(Spacer(1, 20))
-    
-    # Study Information
-    story.append(Paragraph("Study Information", heading_style))
-    story.append(Spacer(1, 10))
-    
-    # Add GEO link if available
-    geo_link = study_info.get('geo_link', '')
-    geo_accession = study_info.get('geo_accession', '')
-    if geo_link and geo_accession:
-        story.append(Paragraph(f"GEO Study: <link href='{geo_link}'>{geo_accession}</link>", normal_style))
-        story.append(Spacer(1, 10))
-    
-    study_data = [
-        ["Study Name:", study_info.get('study_name', 'N/A')],
-        ["Tissue:", study_info.get('tissue', 'N/A')],
-        ["Species:", study_info.get('species', 'N/A')],
-        ["Purpose:", study_info.get('purpose', 'N/A')]
-    ]
-    
-    study_table = Table(study_data, colWidths=[150, 300])
-    study_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.white),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ]))
-    story.append(study_table)
-    story.append(Spacer(1, 20))
-    
-    # QC Metrics
-    story.append(Paragraph("Quality Control Metrics", heading_style))
-    story.append(Spacer(1, 10))
-    
-    metrics_data = [
-        ["Metric", "Value"],
-        ["Total Cells", str(qc_stats['n_cells'])],
-        ["Total Genes", str(qc_stats['n_genes'])],
-        ["Min Genes per Cell", str(qc_stats['min_genes'])],
-        ["Max Genes per Cell", str(qc_stats['max_genes'])],
-        ["Min Total Counts", str(qc_stats['total_counts'][0])],
-        ["Max Total Counts", str(qc_stats['total_counts'][-1])],
-        ["Max Mitochondrial %", f"{qc_stats['max_mito']:.1f}%"]
-    ]
-    
-    metrics_table = Table(metrics_data, colWidths=[200, 100])
-    metrics_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    ]))
-    story.append(metrics_table)
-    story.append(Spacer(1, 20))
-    
-    # Parameters Used
-    story.append(Paragraph("Analysis Parameters", heading_style))
-    story.append(Spacer(1, 10))
-    
-    param_data = [
-        ["Parameter", "Value"],
-        ["Min Genes", str(params.get('min_genes', 'N/A'))],
-        ["Min Cells", str(params.get('min_cells', 'N/A'))],
-        ["Max % MT", str(params.get('max_percent_mt', 'N/A'))],
-        ["Top Genes", str(params.get('n_top_genes', 'N/A'))],
-        ["Number of PCs", str(params.get('n_pcs', 'N/A'))],
-        ["Neighbors", str(params.get('n_neighbors', 'N/A'))],
-        ["Resolution", str(params.get('resolution', 'N/A'))]
-    ]
-    
-    param_table = Table(param_data, colWidths=[200, 100])
-    param_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    ]))
-    story.append(param_table)
-    
-    # Build PDF
-    doc.build(story)
 
 def fetch_geo_metadata(accession: str) -> Dict[str, str]:
     """
@@ -731,157 +938,4 @@ def fetch_geo_metadata(accession: str) -> Dict[str, str]:
             'organism': 'Not available',
             'tissue': 'Not available',
             'summary': 'Not available'
-        }
-
-def generate_consolidated_report(
-    adata: sc.AnnData,
-    output_dir: str,
-    study_info: Dict[str, str],
-    params: Dict[str, Any],
-    qc_stats: Dict[str, Any]
-) -> str:
-    """
-    Generate a consolidated PDF report with all analysis results.
-    
-    Args:
-        adata: AnnData object with processed data
-        output_dir: Directory to save the report
-        study_info: Dictionary containing study information
-        params: Dictionary containing analysis parameters
-        qc_stats: Dictionary containing QC statistics
-        
-    Returns:
-        Path to the generated PDF report
-    """
-    # Create PDF document
-    pdf_path = os.path.join(output_dir, 'consolidated_report.pdf')
-    pdf = PdfPages(pdf_path)
-    
-    # Title page
-    fig, ax = plt.subplots(figsize=(8.5, 11), dpi=150)
-    ax.axis('off')
-    title = "Single-Cell RNA-seq Analysis Report"
-    if study_info.get('geo_accession'):
-        title += f"\nGEO Accession: {study_info['geo_accession']}"
-    ax.text(0.5, 0.5, title, ha='center', va='center', fontsize=16, fontweight='bold')
-    pdf.savefig(fig)
-    plt.close(fig)
-    
-    # Study metadata page
-    fig, ax = plt.subplots(figsize=(8.5, 11), dpi=150)
-    ax.axis('off')
-    metadata_text = "Study Metadata\n\n"
-    metadata_text += f"Title: {study_info.get('title', 'Not available')}\n\n"
-    metadata_text += f"Organism: {study_info.get('organism', 'Not available')}\n\n"
-    metadata_text += f"Tissue: {study_info.get('tissue', 'Not available')}\n\n"
-    metadata_text += f"Summary:\n{study_info.get('summary', 'Not available')}\n\n"
-    metadata_text += f"GEO Link: {study_info.get('geo_link', 'Not available')}"
-    ax.text(0.1, 0.9, metadata_text, fontsize=12, va='top')
-    pdf.savefig(fig)
-    plt.close(fig)
-    
-    # Preprocessing parameters
-    fig, ax = plt.subplots(figsize=(8.5, 11), dpi=150)
-    ax.axis('off')
-    param_text = "Preprocessing Parameters\n\n"
-    for key, value in params.items():
-        param_text += f"{key}: {value}\n"
-    ax.text(0.1, 0.9, param_text, fontsize=12, va='top')
-    pdf.savefig(fig)
-    plt.close(fig)
-    
-    # QC plots
-    # 1. Genes per cell
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-    sns.histplot(qc_stats['genes_per_cell'], bins=50, ax=ax)
-    ax.set_title('Distribution of Genes per Cell', fontsize=12, fontweight='bold', pad=10)
-    ax.set_xlabel('Number of Genes', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.5)
-    plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-    plt.tight_layout()
-    pdf.savefig(fig)
-    plt.close(fig)
-    
-    # 2. Total counts
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-    sns.histplot(qc_stats['total_counts'], bins=50, ax=ax)
-    ax.set_title('Distribution of Total Counts per Cell', fontsize=12, fontweight='bold', pad=10)
-    ax.set_xlabel('Total Counts', fontsize=10, fontweight='bold')
-    ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.5)
-    plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-    plt.tight_layout()
-    pdf.savefig(fig)
-    plt.close(fig)
-    
-    # 3. Mitochondrial percentage
-    if qc_stats['mito_percent'] is not None:
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-        sns.histplot(qc_stats['mito_percent'], bins=50, ax=ax)
-        ax.set_title('Distribution of Mitochondrial Percentage', fontsize=12, fontweight='bold', pad=10)
-        ax.set_xlabel('Mitochondrial Percentage', fontsize=10, fontweight='bold')
-        ax.set_ylabel('Count', fontsize=10, fontweight='bold')
-        ax.tick_params(axis='both', which='major', labelsize=8)
-        for spine in ax.spines.values():
-            spine.set_linewidth(1.5)
-        plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-        plt.tight_layout()
-        pdf.savefig(fig)
-        plt.close(fig)
-    
-    # PCA elbow plot
-    if 'pca' in adata.uns:
-        var_ratio = adata.uns['pca']['variance_ratio']
-        cumsum = np.cumsum(var_ratio)
-        
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-        ax.plot(range(1, len(var_ratio) + 1), cumsum, 'b-', label='Cumulative')
-        ax.plot(range(1, len(var_ratio) + 1), var_ratio, 'r-', label='Individual')
-        ax.set_title('PCA Variance Explained', fontsize=12, fontweight='bold', pad=10)
-        ax.set_xlabel('Principal Component', fontsize=10, fontweight='bold')
-        ax.set_ylabel('Variance Explained', fontsize=10, fontweight='bold')
-        ax.tick_params(axis='both', which='major', labelsize=8)
-        ax.legend(fontsize=8)
-        for spine in ax.spines.values():
-            spine.set_linewidth(1.5)
-        plt.grid(True, linestyle='--', alpha=0.3, color='gray')
-        plt.tight_layout()
-        pdf.savefig(fig)
-        plt.close(fig)
-    
-    # PCA plot
-    if 'X_pca' in adata.obsm:
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-        sc.pl.pca(adata, color='leiden', show=False, ax=ax)
-        ax.set_title('PCA Plot', fontsize=12, fontweight='bold', pad=10)
-        plt.tight_layout()
-        pdf.savefig(fig)
-        plt.close(fig)
-    
-    # UMAP plot
-    if 'X_umap' in adata.obsm:
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-        sc.pl.umap(adata, color='leiden', show=False, ax=ax)
-        ax.set_title('UMAP Plot', fontsize=12, fontweight='bold', pad=10)
-        plt.tight_layout()
-        pdf.savefig(fig)
-        plt.close(fig)
-    
-    # DE analysis summary
-    if 'rank_genes_groups' in adata.uns:
-        fig, ax = plt.subplots(figsize=(6, 4), dpi=150)
-        sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False, show=False, ax=ax)
-        ax.set_title('Differential Expression Analysis', fontsize=12, fontweight='bold', pad=10)
-        plt.tight_layout()
-        pdf.savefig(fig)
-        plt.close(fig)
-    
-    # Close the PDF
-    pdf.close()
-    
-    return pdf_path 
+        } 

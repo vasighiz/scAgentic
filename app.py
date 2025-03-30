@@ -6,7 +6,6 @@ from functions import (
     analyze_qc_metrics,
     plot_qc_metrics,
     plot_pca_variance,
-    generate_qc_report,
     preprocess_data,
     generate_consolidated_report,
     fetch_geo_metadata,
@@ -23,6 +22,9 @@ import seaborn as sns
 import requests
 import json
 from typing import List, Dict, Any
+import re
+from datetime import datetime
+import subprocess
 
 def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
     """
@@ -127,6 +129,98 @@ def execute_interpreted_query(interpretation: Dict[str, Any], adata: sc.AnnData)
             print(f"Error executing {function_name}: {str(e)}")
             return None
     return None
+
+def interpret_query_text(query: str) -> Dict[str, Any]:
+    """
+    Interpret user query using text matching and regular expressions.
+    
+    Args:
+        query: User's natural language query
+        
+    Returns:
+        Dictionary containing interpreted query parameters
+    """
+    query = query.lower()
+    
+    # Define synonyms and patterns
+    patterns = {
+        'umap': {
+            'keywords': ['umap', 'visualization', 'plot', 'show', 'display'],
+            'color_patterns': [
+                (r'color by (.+)', 1),
+                (r'colored by (.+)', 1),
+                (r'by (.+)', 1),
+                (r'expression of (.+)', 1)
+            ],
+            'default_color': 'leiden'
+        },
+        'pca': {
+            'keywords': ['pca', 'principal component', 'dimensionality'],
+            'color_patterns': [
+                (r'color by (.+)', 1),
+                (r'colored by (.+)', 1),
+                (r'by (.+)', 1)
+            ],
+            'default_color': 'leiden'
+        },
+        'de_genes': {
+            'keywords': ['differential expression', 'de genes', 'marker genes', 'top genes'],
+            'cluster_patterns': [
+                (r'cluster (\d+)', 1),
+                (r'group (\d+)', 1),
+                (r'population (\d+)', 1)
+            ]
+        },
+        'qc_metrics': {
+            'keywords': ['qc', 'quality control', 'metrics', 'statistics', 'distribution']
+        }
+    }
+    
+    # Check for each function type
+    for func_name, func_patterns in patterns.items():
+        # Check if any keywords match
+        if any(keyword in query for keyword in func_patterns['keywords']):
+            params = {}
+            
+            # Extract color parameter for visualization functions
+            if 'color_patterns' in func_patterns:
+                for pattern, group in func_patterns['color_patterns']:
+                    match = re.search(pattern, query)
+                    if match:
+                        color = match.group(group).strip()
+                        # Map common terms to actual column names
+                        color_mapping = {
+                            'clusters': 'leiden',
+                            'cluster': 'leiden',
+                            'groups': 'leiden',
+                            'group': 'leiden',
+                            'cell type': 'cell_type',
+                            'cell types': 'cell_type'
+                        }
+                        params['color'] = color_mapping.get(color, color)
+                        break
+                else:
+                    params['color'] = func_patterns['default_color']
+            
+            # Extract cluster number for DE analysis
+            if 'cluster_patterns' in func_patterns:
+                for pattern, group in func_patterns['cluster_patterns']:
+                    match = re.search(pattern, query)
+                    if match:
+                        params['cluster'] = int(match.group(group))
+                        break
+            
+            return {
+                'function_name': func_name,
+                'parameters': params,
+                'confidence': 0.8  # High confidence for exact matches
+            }
+    
+    return {
+        'function_name': None,
+        'parameters': {},
+        'confidence': 0.0
+    }
 
 # Set page config
 st.set_page_config(
@@ -406,8 +500,11 @@ with tab1:
                             )
                             os.makedirs(output_dir, exist_ok=True)
                             
+                            # Record start time for runtime calculation
+                            start_time = datetime.now()
+                            
                             # Preprocess data
-                            st.session_state.agent.adata = preprocess_data(
+                            adata, figures = preprocess_data(
                                 st.session_state.agent.adata,
                                 min_genes=min_genes,
                                 min_cells=min_cells,
@@ -417,46 +514,60 @@ with tab1:
                                 n_neighbors=n_neighbors,
                                 resolution=resolution
                             )
+                            st.session_state.agent.adata = adata
+                            
+                            # Calculate runtime
+                            runtime = (datetime.now() - start_time).total_seconds()
                             
                             # Analyze QC metrics
                             qc_stats = analyze_qc_metrics(st.session_state.agent.adata)
                             
-                            # Generate consolidated report
-                            pdf_path = generate_consolidated_report(
-                                st.session_state.agent.adata,
-                                output_dir,
-                                {
-                                    **st.session_state.study_info,
-                                    'geo_link': st.session_state.geo_link if hasattr(st.session_state, 'geo_link') else '',
-                                    'geo_accession': st.session_state.geo_accession if hasattr(st.session_state, 'geo_accession') else ''
-                                },
-                                {
-                                    'min_genes': min_genes,
-                                    'min_cells': min_cells,
-                                    'max_percent_mt': max_percent_mt,
-                                    'n_top_genes': n_top_genes,
-                                    'n_pcs': n_pcs,
-                                    'n_neighbors': n_neighbors,
-                                    'resolution': resolution
-                                },
-                                qc_stats
-                            )
-                            
-                            # Save preprocessed data
-                            preprocessed_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(h5ad_path))[0]}_preprocessed.h5ad")
-                            st.session_state.agent.adata.write(preprocessed_path)
-                            
-                            st.success("Preprocessing completed successfully!")
-                            st.session_state.preprocessed = True
-                            
-                            # Add download button for the report
-                            with open(pdf_path, "rb") as file:
-                                st.download_button(
-                                    label="Download Analysis Report",
-                                    data=file,
-                                    file_name="consolidated_report.pdf",
-                                    mime="application/pdf"
+                            try:
+                                # Generate LaTeX report
+                                pdf_path = generate_consolidated_report(
+                                    adata=adata,
+                                    output_dir=output_dir,
+                                    study_info=st.session_state.study_info,
+                                    params={
+                                        'min_genes': min_genes,
+                                        'min_cells': min_cells,
+                                        'max_percent_mt': max_percent_mt,
+                                        'n_top_genes': n_top_genes,
+                                        'n_pcs': n_pcs,
+                                        'n_neighbors': n_neighbors,
+                                        'resolution': resolution
+                                    },
+                                    qc_stats=qc_stats,
+                                    figures=figures,
+                                    runtime=runtime
                                 )
+                                
+                                # Set preprocessing flag
+                                st.session_state.preprocessed = True
+                                
+                                # Display success message
+                                st.success("Preprocessing completed successfully!")
+                                
+                                # Add download button for the report
+                                with open(pdf_path, "rb") as file:
+                                    st.download_button(
+                                        label="Download Analysis Report",
+                                        data=file,
+                                        file_name="final_report.pdf",
+                                        mime="application/pdf"
+                                    )
+                                
+                            except subprocess.CalledProcessError as e:
+                                st.error("""
+                                    LaTeX report generation failed. This might be due to:
+                                    - Special characters in study information or gene names
+                                    - Missing figure files
+                                    - LaTeX compilation issues
+                                    
+                                    Please check the console for detailed error messages.
+                                    The analysis results are still available in the Analysis tab.
+                                    """)
+                                st.session_state.preprocessed = True  # Still allow analysis to proceed
                             
                         except Exception as e:
                             st.error(f"Error during preprocessing: {str(e)}")
@@ -692,32 +803,54 @@ with tab3:
                     'plot_pca_variance'
                 ]
                 
-                # Process query with LLM
+                # Try LLM first
                 interpretation = process_query_with_llm(prompt, available_functions)
                 
+                # If LLM fails or has low confidence, try text-based interpretation
+                if interpretation['confidence'] < 0.5 or not interpretation['function_name']:
+                    interpretation = interpret_query_text(prompt)
+                
                 if interpretation['confidence'] >= 0.5 and interpretation['function_name']:
-                    # Execute the interpreted query
-                    result = execute_interpreted_query(interpretation, st.session_state.agent.adata)
+                    # Map function names to actual functions
+                    function_map = {
+                        'umap': plot_umap,
+                        'pca': plot_pca,
+                        'qc_metrics': analyze_qc_metrics,
+                        'de_genes': lambda adata, **kwargs: analyze_cell_populations(adata, **kwargs)
+                    }
                     
-                    if result is not None:
-                        # Display the result
-                        if isinstance(result, plt.Figure):
-                            st.pyplot(result)
-                        elif isinstance(result, pd.DataFrame):
-                            st.dataframe(result)
+                    # Execute the interpreted query
+                    if interpretation['function_name'] in function_map:
+                        result = function_map[interpretation['function_name']](
+                            st.session_state.agent.adata,
+                            **interpretation['parameters']
+                        )
+                        
+                        if result is not None:
+                            # Display the result
+                            if isinstance(result, plt.Figure):
+                                st.pyplot(result)
+                            elif isinstance(result, pd.DataFrame):
+                                st.dataframe(result)
+                            else:
+                                st.write(result)
+                                
+                            # Add success message to chat history
+                            st.session_state.chat_history.append({
+                                "role": "assistant",
+                                "content": "I've processed your request. Here's what I found."
+                            })
                         else:
-                            st.write(result)
-                            
-                        # Add success message to chat history
-                        st.session_state.chat_history.append({
-                            "role": "assistant",
-                            "content": "I've processed your request. Here's what I found."
-                        })
+                            st.error("I couldn't execute that query. Please try rephrasing or use one of the example prompts above.")
+                            st.session_state.chat_history.append({
+                                "role": "assistant",
+                                "content": "I couldn't execute that query. Please try rephrasing or use one of the example prompts above."
+                            })
                     else:
-                        st.error("I couldn't execute that query. Please try rephrasing or use one of the example prompts above.")
+                        st.error("I couldn't match your question to a known function. Try rephrasing or use one of the example prompts above.")
                         st.session_state.chat_history.append({
                             "role": "assistant",
-                            "content": "I couldn't execute that query. Please try rephrasing or use one of the example prompts above."
+                            "content": "I couldn't match your question to a known function. Try rephrasing or use one of the example prompts above."
                         })
                 else:
                     st.error("I couldn't match your question to a known function. Try rephrasing or use one of the example prompts above.")

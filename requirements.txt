@@ -12,3 +12,6 @@ python-igraph>=0.11.0
 h5py>=3.8.0
 python-dotenv>=1.0.0
 reportlab>=4.0.4
+texlive>=2023.0
+texlive-latex-extra>=2023.0
+texlive-science>=2023.0
