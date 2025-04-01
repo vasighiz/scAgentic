@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (MiKTeX 24.4) (preloaded format=pdflatex 2024.10.18)  30 MAR 2025 23:45
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (MiKTeX 24.4) (preloaded format=pdflatex 2024.10.18)  1 APR 2025 15:15
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -369,8 +369,7 @@ tex.def
 File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count306
 \l__pdf_internal_box=\box57
-)
-No file report.aux.
+) (report.aux)
 \openout1 = `report.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 31.
@@ -457,10 +456,11 @@ Package caption Info: End \AtBeginDocument code.
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
 Package hyperref Info: Link coloring ON on input line 31.
+(report.out) (report.out)
 \@outlinefile=\write3
 \openout3 = `report.out'.
 
-<scagentic_logo.png, id=3, 1027.84pt x 1027.84pt>
+<scagentic_logo.png, id=15, 1027.84pt x 1027.84pt>
 File: scagentic_logo.png Graphic file (type png)
 <use scagentic_logo.png>
 Package pdftex.def Info: scagentic_logo.png  used on input line 37.
@@ -470,8 +470,7 @@ Package pdftex.def Info: scagentic_logo.png  used on input line 37.
 [1
 
 {C:/Users/prgrm/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map} <./scagentic_
-logo.png (PNG copy)>]
-No file report.toc.
+logo.png (PNG copy)>] (report.toc)
 \tf@toc=\write4
 \openout4 = `report.toc'.
 
@@ -484,7 +483,7 @@ been already used, duplicate ignored
                    \relax 
 l.64 \newpage
               [1]
-<qc_distributions.png, id=15, 1090.3134pt x 354.123pt>
+<qc_distributions.png, id=30, 1090.3134pt x 354.123pt>
 File: qc_distributions.png Graphic file (type png)
 <use qc_distributions.png>
 Package pdftex.def Info: qc_distributions.png  used on input line 101.
@@ -492,7 +491,7 @@ Package pdftex.def Info: qc_distributions.png  used on input line 101.
 
 
 [2 <./qc_distributions.png>]
-<highly_variable_genes.png, id=28, 767.2665pt x 312.6882pt>
+<highly_variable_genes.png, id=40, 767.2665pt x 312.6882pt>
 File: highly_variable_genes.png Graphic file (type png)
 <use highly_variable_genes.png>
 Package pdftex.def Info: highly_variable_genes.png  used on input line 109.
@@ -500,7 +499,7 @@ Package pdftex.def Info: highly_variable_genes.png  used on input line 109.
 
 
 [3 <./highly_variable_genes.png>]
-<pca_variance.png, id=35, 421.8159pt x 327.8649pt>
+<pca_variance.png, id=47, 421.8159pt x 327.8649pt>
 File: pca_variance.png Graphic file (type png)
 <use pca_variance.png>
 Package pdftex.def Info: pca_variance.png  used on input line 117.
@@ -508,7 +507,7 @@ Package pdftex.def Info: pca_variance.png  used on input line 117.
 
 
 [4 <./pca_variance.png>]
-<umap.png, id=42, 386.8854pt x 295.5843pt>
+<umap.png, id=54, 386.8854pt x 295.5843pt>
 File: umap.png Graphic file (type png)
 <use umap.png>
 Package pdftex.def Info: umap.png  used on input line 125.
@@ -516,7 +515,7 @@ Package pdftex.def Info: umap.png  used on input line 125.
 
 
 [5 <./umap.png>]
-<umap_clusters.png, id=49, 434.5836pt x 310.761pt>
+<umap_clusters.png, id=61, 434.5836pt x 310.761pt>
 File: umap_clusters.png Graphic file (type png)
 <use umap_clusters.png>
 Package pdftex.def Info: umap_clusters.png  used on input line 133.
@@ -524,7 +523,7 @@ Package pdftex.def Info: umap_clusters.png  used on input line 133.
 
 
 [6 <./umap_clusters.png>]
-<de.png, id=57, 1482.0168pt x 595.023pt>
+<de.png, id=69, 1482.0168pt x 595.023pt>
 File: de.png Graphic file (type png)
 <use de.png>
 Package pdftex.def Info: de.png  used on input line 141.
@@ -536,24 +535,14 @@ Package pdftex.def Info: de.png  used on input line 141.
 LaTeX2e <2024-06-01> patch level 2
 L3 programming layer <2024-08-30>
  ***********
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
-
-Package rerunfilecheck Warning: File `report.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `report.out':
-(rerunfilecheck)             Before: <no file>
-(rerunfilecheck)             After:  223ED0D6C5B1D6D91E1D65F663E0596B;350.
+Package rerunfilecheck Info: File `report.out' has not changed.
+(rerunfilecheck)             Checksum: 223ED0D6C5B1D6D91E1D65F663E0596B;350.
  ) 
 Here is how much of TeX's memory you used:
- 12067 strings out of 473899
- 193523 string characters out of 5726499
- 597469 words of memory out of 5000000
- 34802 multiletter control sequences out of 15000+600000
+ 12082 strings out of 473899
+ 193931 string characters out of 5726499
+ 597778 words of memory out of 5000000
+ 34809 multiletter control sequences out of 15000+600000
  563633 words of font info for 55 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,8n,79p,252b,520s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -561,9 +550,9 @@ Here is how much of TeX's memory you used:
 1200.pk><C:/Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfon
 ts/cm/cmbx12.pfb><C:/Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/publ
 ic/amsfonts/cm/cmr12.pfb>
-Output written on report.pdf (8 pages, 2293530 bytes).
+Output written on report.pdf (8 pages, 2295058 bytes).
 PDF statistics:
- 84 PDF objects out of 1000 (max. 8388607)
+ 97 PDF objects out of 1000 (max. 8388607)
  19 named destinations out of 1000 (max. 500000)
- 36 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 60 words of extra memory for PDF output out of 10000 (max. 10000000)
 

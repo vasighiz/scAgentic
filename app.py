@@ -304,165 +304,109 @@ def main():
         page_title="scAgentic - Single-Cell Analysis",
         page_icon="🧬",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="collapsed"
     )
     
-    # Custom CSS
+    # Custom CSS for a cleaner interface
     st.markdown("""
         <style>
         .stApp {
-            max-width: 1200px;
+            max-width: 1000px;
             margin: 0 auto;
+            padding: 1rem;
         }
-        .main .block-container {
-            padding-top: 2rem;
+        .chat-message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
         }
-        .stPlotlyChart {
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 2rem;
+        }
+        .assistant-message {
+            background-color: #f5f5f5;
+            margin-right: 2rem;
+        }
+        .message-content {
+            flex-grow: 1;
+        }
+        .message-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+        }
+        .user-icon {
+            background-color: #2196f3;
+            color: white;
+        }
+        .assistant-icon {
+            background-color: #757575;
+            color: white;
+        }
+        .upload-section {
+            background-color: #f8f9fa;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .results-section {
+            margin-top: 2rem;
+        }
+        .plot-container {
             background-color: white;
             padding: 1rem;
             border-radius: 0.5rem;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .info-box {
-            background-color: #f0f2f6;
-            padding: 1rem;
-            border-radius: 0.5rem;
             margin-bottom: 1rem;
         }
         .step-message {
             color: #1f77b4;
             font-weight: bold;
             margin: 0.5rem 0;
-        }
-        /* Custom sidebar width */
-        [data-testid="stSidebar"][aria-expanded="true"] {
-            min-width: 200px !important;
-            max-width: 250px !important;
-        }
-        /* Adjust sidebar content padding */
-        .css-1d391kg {
-            padding-top: 1rem;
-        }
-        /* Adjust logo container */
-        .css-1d391kg > div:first-child {
             padding: 0.5rem;
-            text-align: center;
-        }
-        /* Adjust logo image */
-        .css-1d391kg > div:first-child img {
-            width: 120px !important;
-            height: auto !important;
-        }
-        /* Upload section styling */
-        .upload-section {
-            background-color: #f8f9fa;
-            padding: 1.5rem;
+            background-color: #e3f2fd;
             border-radius: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        .file-info {
-            font-size: 0.9rem;
-            color: #666;
-            margin-top: 0.5rem;
-        }
-        .upload-warning {
-            color: #856404;
-            background-color: #fff3cd;
-            border: 1px solid #ffeeba;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin: 1rem 0;
         }
         </style>
     """, unsafe_allow_html=True)
     
-    # Sidebar
-    with st.sidebar:
-        st.image("scagentic_logo.png", width=120)
-        st.markdown("### scAgentic")
-        st.markdown("AI-Powered Single-Cell Analysis")
-        
-        # Data info box
-        if 'study_info' in st.session_state:
-            st.markdown("### Dataset Information")
-            info_box = f"""
-            <div class="info-box">
-                <p><strong>GEO ID:</strong> {st.session_state.study_info.get('geo_accession', 'N/A')}</p>
-                <p><strong>Tissue:</strong> {st.session_state.study_info.get('tissue', 'N/A')}</p>
-                <p><strong>Organism:</strong> {st.session_state.study_info.get('organism', 'N/A')}</p>
-            </div>
-            """
-            st.markdown(info_box, unsafe_allow_html=True)
-        
-        # Analysis parameters
-        st.markdown("### Analysis Parameters")
-        with st.form("analysis_params"):
-            min_genes = st.number_input("Min genes per cell", min_value=1, value=200)
-            min_cells = st.number_input("Min cells per gene", min_value=1, value=3)
-            max_percent_mt = st.number_input("Max % MT", min_value=0, max_value=100, value=20)
-            n_top_genes = st.number_input("Number of HVGs", min_value=100, value=2000)
-            n_pcs = st.number_input("Number of PCs", min_value=1, value=50)
-            resolution = st.number_input("Clustering resolution", min_value=0.1, max_value=2.0, value=0.5, step=0.1)
-            
-            submitted = st.form_submit_button("Update Parameters")
-            if submitted:
-                st.session_state.params = {
-                    'min_genes': min_genes,
-                    'min_cells': min_cells,
-                    'max_percent_mt': max_percent_mt,
-                    'n_top_genes': n_top_genes,
-                    'n_pcs': n_pcs,
-                    'resolution': resolution
-                }
-        
-        # Download buttons
-        if 'output_dir' in st.session_state:
-            st.markdown("### Download Results")
-            
-            # PDF Report
-            if os.path.exists(os.path.join(st.session_state.output_dir, 'report.pdf')):
-                with open(os.path.join(st.session_state.output_dir, 'report.pdf'), 'rb') as f:
-                    st.download_button(
-                        label="Download PDF Report",
-                        data=f,
-                        file_name="scagentic_report.pdf",
-                        mime="application/pdf"
-                    )
-            
-            # Processed Data
-            if os.path.exists(os.path.join(st.session_state.output_dir, 'processed_data.h5ad')):
-                with open(os.path.join(st.session_state.output_dir, 'processed_data.h5ad'), 'rb') as f:
-                    st.download_button(
-                        label="Download Processed Data",
-                        data=f,
-                        file_name="processed_data.h5ad",
-                        mime="application/octet-stream"
-                    )
-    
     # Main content
-    st.title("Single-Cell RNA-seq Analysis")
+    st.title("🧬 scAgentic")
+    st.markdown("AI-Powered Single-Cell Analysis")
+    
+    # Initialize chat history if not exists
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
     
     # Data upload section
-    st.markdown("### Upload Data")
-    st.markdown("""
-        <div class="upload-section">
-            <p>Upload your single-cell RNA-seq data in either format:</p>
-            <ul>
-                <li><strong>AnnData (.h5ad) file:</strong> A pre-processed single-cell dataset</li>
-                <li><strong>10X Genomics files:</strong> Three files from 10X Genomics output (matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz)</li>
-            </ul>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Unified file uploader with no type restrictions
-    uploaded_files = st.file_uploader(
-        "Upload your data files",
-        type=None,  # Accept any file type
-        accept_multiple_files=True
-    )
-    
-    if uploaded_files:
-        if 'adata' not in st.session_state:
+    if 'adata' not in st.session_state:
+        st.markdown("""
+            <div class="upload-section">
+                <h3>Upload Your Data</h3>
+                <p>Upload your single-cell RNA-seq data in either format:</p>
+                <ul>
+                    <li><strong>AnnData (.h5ad) file:</strong> A pre-processed single-cell dataset</li>
+                    <li><strong>10X Genomics files:</strong> Three files from 10X Genomics output (matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz)</li>
+                </ul>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Unified file uploader
+        uploaded_files = st.file_uploader(
+            "Upload your data files",
+            type=None,
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files:
             with st.spinner("Loading data..."):
                 try:
                     # Create data directory if it doesn't exist
@@ -561,10 +505,30 @@ def main():
                         </div>
                     """, unsafe_allow_html=True)
                     
+                    # Add welcome message to chat
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': f"Welcome! I've loaded your dataset with {adata.n_obs:,} cells and {adata.n_vars:,} genes. I'll now run the analysis pipeline automatically."
+                    })
+                    
                 except Exception as e:
                     st.error(f"Error loading data: {str(e)}")
                     st.session_state.adata = None
                     st.session_state.study_info = None
+    
+    # Display chat history
+    for message in st.session_state.chat_history:
+        with st.container():
+            st.markdown(f"""
+                <div class="chat-message {message['role']}-message">
+                    <div class="message-icon {message['role']}-icon">
+                        {'👤' if message['role'] == 'user' else '🧬'}
+                    </div>
+                    <div class="message-content">
+                        {message['content']}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
     
     # Analysis steps
     if 'adata' in st.session_state and st.session_state.adata is not None:
@@ -596,7 +560,7 @@ def main():
         
         # Run automatic preprocessing if data is loaded but preprocessing hasn't been done
         if not st.session_state.preprocessing_done:
-            with st.spinner("Running automatic preprocessing pipeline..."):
+            with st.spinner("Running analysis pipeline..."):
                 try:
                     # Quality Control
                     st.markdown('<p class="step-message">Running quality control...</p>', unsafe_allow_html=True)
@@ -750,12 +714,15 @@ def main():
                     except Exception as e:
                         st.error(f"Error generating PDF report: {str(e)}")
                         st.session_state.preprocessing_done = False
-                        raise
+                        st.session_state.chat_history.append({
+                            'role': 'assistant',
+                            'content': f"I encountered an error while generating the PDF report: {str(e)}"
+                        })
                     
                     # Mark preprocessing as done
                     st.session_state.preprocessing_done = True
                     
-                    st.success("Automatic preprocessing completed successfully!")
+                    st.success("Analysis complete! I've generated visualizations and a PDF report. You can ask me questions about the results or request parameter adjustments.")
                     st.markdown("""
                         <div class="info-box">
                             <p><strong>Preprocessing Summary:</strong></p>
@@ -769,28 +736,111 @@ def main():
                     """.format(adata.n_obs, adata.n_vars, len(adata.obs['leiden'].unique())), 
                     unsafe_allow_html=True)
                     
+                    # Add completion message to chat
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': f"Analysis complete! I've generated visualizations and a PDF report. You can ask me questions about the results or request parameter adjustments."
+                    })
+                    
                 except Exception as e:
-                    st.error(f"Error in automatic preprocessing: {str(e)}")
+                    st.error(f"Error in analysis pipeline: {str(e)}")
                     st.session_state.preprocessing_done = False
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': f"I encountered an error during analysis: {str(e)}"
+                    })
         
-        # Chat interface for parameter adjustments
+        # Display results if preprocessing is done
+        if st.session_state.preprocessing_done:
+            st.markdown("### Analysis Results")
+            
+            # Display plots in a grid
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Quality Control")
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'qc_distributions.png')):
+                    st.image(os.path.join(st.session_state.output_dir, 'qc_distributions.png'))
+                
+                st.markdown("#### Highly Variable Genes")
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'highly_variable_genes.png')):
+                    st.image(os.path.join(st.session_state.output_dir, 'highly_variable_genes.png'))
+            
+            with col2:
+                st.markdown("#### PCA")
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'pca_variance.png')):
+                    st.image(os.path.join(st.session_state.output_dir, 'pca_variance.png'))
+                
+                st.markdown("#### UMAP")
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'umap.png')):
+                    st.image(os.path.join(st.session_state.output_dir, 'umap.png'))
+            
+            # Full-width plots
+            st.markdown("#### Clustering")
+            if os.path.exists(os.path.join(st.session_state.output_dir, 'umap_clusters.png')):
+                st.image(os.path.join(st.session_state.output_dir, 'umap_clusters.png'))
+            
+            st.markdown("#### Differential Expression")
+            if os.path.exists(os.path.join(st.session_state.output_dir, 'de.png')):
+                st.image(os.path.join(st.session_state.output_dir, 'de.png'))
+            
+            # Download buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'final_report.pdf')):
+                    with open(os.path.join(st.session_state.output_dir, 'final_report.pdf'), 'rb') as f:
+                        st.download_button(
+                            label="📥 Download PDF Report",
+                            data=f,
+                            file_name="scagentic_report.pdf",
+                            mime="application/pdf"
+                        )
+            
+            with col2:
+                if os.path.exists(os.path.join(st.session_state.output_dir, 'processed_data.h5ad')):
+                    with open(os.path.join(st.session_state.output_dir, 'processed_data.h5ad'), 'rb') as f:
+                        st.download_button(
+                            label="📥 Download Processed Data",
+                            data=f,
+                            file_name="processed_data.h5ad",
+                            mime="application/octet-stream"
+                        )
+        
+        # Chat interface
         st.markdown("### Ask Questions About Your Data")
-        user_question = st.text_input("Ask a question about your data or request parameter adjustments:")
+        user_question = st.text_input("Type your question here...", key="user_input")
         if user_question:
+            # Add user message to chat
+            st.session_state.chat_history.append({
+                'role': 'user',
+                'content': user_question
+            })
+            
             with st.spinner("Processing your request..."):
                 try:
                     # Process the question and generate response
                     response = process_question(user_question, adata)
-                    st.write(response)
+                    
+                    # Add assistant response to chat
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': response
+                    })
                     
                     # Check if the question was about parameter adjustments
                     if "parameter" in user_question.lower() or "redo" in user_question.lower():
                         # Reset preprocessing flag to allow re-running with new parameters
                         st.session_state.preprocessing_done = False
                         st.experimental_rerun()
-                        
+                    
                 except Exception as e:
                     st.error(f"Error processing question: {str(e)}")
+                    st.session_state.chat_history.append({
+                        'role': 'assistant',
+                        'content': f"I encountered an error while processing your question: {str(e)}"
+                    })
+            
+            # Clear the input
+            st.session_state.user_input = ""
 
 if __name__ == "__main__":
     main() 
