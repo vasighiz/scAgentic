@@ -1,0 +1,106 @@
+
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+% Page geometry
+\geometry{a4paper, margin=1in}
+
+% Hyperref settings
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan
+}
+
+% Custom commands
+\newcommand{\datasetname}[1]{\textbf{#1}}
+\newcommand{\paramname}[1]{\texttt{#1}}
+
+% Title page
+\begin{document}
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    % Logo
+    \includegraphics[width=0.4\textwidth]{scagentic_logo.png}
+    \vspace{1cm}
+
+    % Title
+    \Huge\textbf{Single-Cell RNA-seq Analysis Report}
+    \vspace{1cm}
+
+    % Study information
+    \Large\textbf{Test Study}
+    \vspace{0.5cm}
+
+    % GEO accession
+    \Large\textbf{GEO Accession: GSE12345}
+    \vspace{0.5cm}
+
+    % Species and tissue
+    \Large\textbf{Species: Homo sapiens}
+    \vspace{0.5cm}
+    \Large\textbf{Tissue: Brain}
+    \vspace{1cm}
+
+    % Date
+    \large\today
+\end{titlepage}
+
+% Table of contents
+\tableofcontents
+\newpage
+
+% Study information
+\section{Study Information}
+\begin{itemize}
+    \item \textbf{GEO Accession:} GSE12345
+    \item \textbf{Species:} Homo sapiens
+    \item \textbf{Tissue:} Brain
+    \item \textbf{Analysis Date:} March 30, 2025
+\end{itemize}
+
+% Analysis parameters
+\section{Analysis Parameters}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        \textbf{Parameter} & \textbf{Value} \\
+        \midrule
+        Min Genes & 200 \\
+        Min Cells & 3 \\
+        Max Percent Mt & 20 \\
+        N Top Genes & 2000 \\
+        N Pcs & 50 \\
+
+        \bottomrule
+    \end{tabular}
+    \caption{Analysis parameters used in preprocessing}
+    \label{tab:parameters}
+\end{table}
+
+% Results
+\section{{Results}}
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.8\textwidth]{dummy_plot.png}
+        \caption{Dummy Plot}
+        \label{fig:dummy_plot}
+    \end{figure}
+    \newpage
+
+\end{document}

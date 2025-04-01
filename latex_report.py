@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 import scanpy as sc
 import matplotlib.pyplot as plt
 import re
+import shutil
 
 def sanitize_latex(text: str) -> str:
     """
@@ -104,6 +105,12 @@ def generate_latex_report(
         if 'analysis_results_' in dir_name:
             geo_accession = dir_name.replace('analysis_results_', '')
     
+    # Copy logo to output directory
+    logo_src = "scagentic_logo.png"
+    logo_dst = os.path.join(output_dir, "scagentic_logo.png")
+    if os.path.exists(logo_src):
+        shutil.copy2(logo_src, logo_dst)
+    
     # Generate LaTeX content
     latex_content = f"""
 \\documentclass[12pt]{{article}}
@@ -117,6 +124,9 @@ def generate_latex_report(
 \\usepackage{{fancyhdr}}
 \\usepackage{{caption}}
 \\usepackage{{subcaption}}
+\\usepackage{{float}}
+\\usepackage{{enumitem}}
+\\usepackage{{xcolor}}
 
 % Page geometry
 \\geometry{{a4paper, margin=1in}}
@@ -132,6 +142,18 @@ def generate_latex_report(
 \\title{{Single-Cell RNA-seq Analysis Report}}
 \\date{{{datetime.now().strftime('%B %d, %Y')}}}
 
+% Hyperref settings
+\\hypersetup{{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan
+}}
+
+% Custom commands
+\\newcommand{{\\datasetname}}[1]{{\\textbf{{#1}}}}
+\\newcommand{{\\paramname}}[1]{{\\texttt{{#1}}}}
+
 % Begin document
 \\begin{{document}}
 
@@ -141,10 +163,8 @@ def generate_latex_report(
     \\vspace*{{2cm}}
     
     % Logo
-    \\IfFileExists{{scagentic_logo.png}}{{
-        \\includegraphics[width=0.4\\textwidth]{{scagentic_logo.png}}
-        \\vspace{{1.5cm}}
-    }}{{}}
+    \\includegraphics[width=0.4\\textwidth]{{scagentic_logo.png}}
+    \\vspace{{1cm}}
     
     \\Huge\\textbf{{Single-Cell RNA-seq Analysis Report}}\\\\[1cm]
     
@@ -374,12 +394,6 @@ def generate_latex_report(
     tex_path = os.path.join(output_dir, 'report.tex')
     with open(tex_path, 'w', encoding='utf-8') as f:
         f.write(latex_content)
-    
-    # Copy logo file to output directory if it exists
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(output_dir)), 'scagentic_logo.png')
-    if os.path.exists(logo_path):
-        import shutil
-        shutil.copy2(logo_path, os.path.join(output_dir, 'scagentic_logo.png'))
     
     # Compile LaTeX to PDF
     try:
