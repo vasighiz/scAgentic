@@ -620,7 +620,7 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Quality Control',
-                            'description': 'Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content.',
+                            'description': 'Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content. The violin plots show: (1) The number of genes expressed in the count matrix, (2) The total counts per cell, and (3) The percentage of counts in mitochondrial genes.',
                             'plot': 'qc_distributions.png'
                         })
                     plt.close(fig)
@@ -711,12 +711,7 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'umap.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['umap'] = fig
-                        # Add step to analysis steps
-                        st.session_state.analysis_steps.append({
-                            'step': 'UMAP Visualization',
-                            'description': 'Generated UMAP dimensionality reduction visualization of the dataset.',
-                            'plot': 'umap.png'
-                        })
+                        # UMAP visualization step removed as requested
                     plt.close(fig)
                     
                     # Run clustering
@@ -781,7 +776,6 @@ def main():
                             'qc_distributions.png',
                             'highly_variable_genes.png',
                             'pca_variance.png',
-                            'umap.png',
                             'umap_clusters.png',
                             'de.png'
                         ]
@@ -855,36 +849,6 @@ def main():
                     st.markdown(step['description'])
                     if step['plot'] and os.path.exists(os.path.join(st.session_state.output_dir, step['plot'])):
                         st.image(os.path.join(st.session_state.output_dir, step['plot']))
-            
-            # Display plots in a grid
-            st.markdown("#### Visualization Gallery")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Quality Control")
-                if os.path.exists(os.path.join(st.session_state.output_dir, 'qc_distributions.png')):
-                    st.image(os.path.join(st.session_state.output_dir, 'qc_distributions.png'))
-                
-                st.markdown("#### Highly Variable Genes")
-                if os.path.exists(os.path.join(st.session_state.output_dir, 'highly_variable_genes.png')):
-                    st.image(os.path.join(st.session_state.output_dir, 'highly_variable_genes.png'))
-            
-            with col2:
-                st.markdown("#### PCA")
-                if os.path.exists(os.path.join(st.session_state.output_dir, 'pca_variance.png')):
-                    st.image(os.path.join(st.session_state.output_dir, 'pca_variance.png'))
-                
-                st.markdown("#### UMAP")
-                if os.path.exists(os.path.join(st.session_state.output_dir, 'umap.png')):
-                    st.image(os.path.join(st.session_state.output_dir, 'umap.png'))
-            
-            # Full-width plots
-            st.markdown("#### Clustering")
-            if os.path.exists(os.path.join(st.session_state.output_dir, 'umap_clusters.png')):
-                st.image(os.path.join(st.session_state.output_dir, 'umap_clusters.png'))
-            
-            st.markdown("#### Differential Expression")
-            if os.path.exists(os.path.join(st.session_state.output_dir, 'de.png')):
-                st.image(os.path.join(st.session_state.output_dir, 'de.png'))
             
             # Download buttons
             col1, col2 = st.columns(2)

@@ -201,24 +201,6 @@ def generate_pdf_report(
 \\end{{figure}}
 """
     
-    # Results section
-    latex_content += """
-\\section{{Results}}
-"""
-    
-    # Add plots
-    for i, plot_file in enumerate(plot_files, 1):
-        if os.path.exists(os.path.join(output_dir, plot_file)):
-            latex_content += f"""
-    \\begin{{figure}}[H]
-        \\centering
-        \\includegraphics[width=0.8\\textwidth]{{{plot_file}}}
-        \\caption{{{sanitize_latex(plot_file.replace('.png', '').replace('_', ' ').title())}}}
-        \\label{{fig:{plot_file.replace('.png', '')}}}
-    \\end{{figure}}
-    \\newpage
-"""
-    
     latex_content += """
 \\end{document}
 """
