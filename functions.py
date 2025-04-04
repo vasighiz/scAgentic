@@ -678,7 +678,6 @@ def generate_latex_report(
         \\midrule
         Title & {study_info.get('title', 'Not available')} \\\\
         Organism & {study_info.get('organism', 'Not available')} \\\\
-        Tissue & {study_info.get('tissue', 'Not available')} \\\\
         \\bottomrule
     \\end{{tabular}}
     \\caption{{Study metadata from GEO}}
@@ -906,7 +905,9 @@ def fetch_geo_metadata(accession: str) -> Dict[str, str]:
             'title': 'Not available',
             'organism': 'Not available',
             'tissue': 'Not available',
-            'summary': 'Not available'
+            'summary': 'Not available',
+            'status': 'Not available',
+            'source_name': 'Not available'
         }
         
         # Extract title
@@ -929,6 +930,16 @@ def fetch_geo_metadata(accession: str) -> Dict[str, str]:
         if summary_elem and summary_elem.find_next('td'):
             metadata['summary'] = summary_elem.find_next('td').text.strip()
         
+        # Extract status
+        status_elem = soup.find('td', string=re.compile('Status', re.IGNORECASE))
+        if status_elem and status_elem.find_next('td'):
+            metadata['status'] = status_elem.find_next('td').text.strip()
+        
+        # Extract source name
+        source_elem = soup.find('td', string=re.compile('Source name', re.IGNORECASE))
+        if source_elem and source_elem.find_next('td'):
+            metadata['source_name'] = source_elem.find_next('td').text.strip()
+        
         return metadata
         
     except Exception as e:
@@ -937,5 +948,7 @@ def fetch_geo_metadata(accession: str) -> Dict[str, str]:
             'title': 'Not available',
             'organism': 'Not available',
             'tissue': 'Not available',
-            'summary': 'Not available'
+            'summary': 'Not available',
+            'status': 'Not available',
+            'source_name': 'Not available'
         } 

@@ -91,8 +91,12 @@ pdfTeX warning (ext4): destination with the same identifier (name{page.1}) has
 been already used, duplicate ignored
 <to be read again> 
                    \relax 
-l.64 \newpage
+l.63 \newpage
               [1]
+Overfull \hbox (49.87178pt too wide) in paragraph at lines 78--79
+[]\OT1/cmr/bx/n/12 GEO Link: [][]$\OT1/cmtt/m/n/12 https : / / www . ncbi . nlm
+ . nih . gov / geo / query / acc . cgi ? acc = GSM7770556$[][] 
+
 [2 <./qc_distributions.png>]
 [3 <./highly_variable_genes.png>]
 [4 <./pca_variance.png>]
@@ -102,6 +106,8 @@ l.64 \newpage
 (see the transcript file for additional information) <C:\Users\prgrm\AppData\Lo
 cal\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk><C:/Users/prgrm/AppDa
 ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/pr
-grm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb>
-Output written on report.pdf (8 pages, 2295449 bytes).
+grm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/
+Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt12
+.pfb>
+Output written on report.pdf (8 pages, 2304661 bytes).
 Transcript written on report.log.

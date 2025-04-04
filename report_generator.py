@@ -122,7 +122,6 @@ def generate_pdf_report(
     % Species and tissue
     \\Large\\textbf{{Species: {study_info['organism']}}}
     \\vspace{{0.5cm}}
-    \\Large\\textbf{{Tissue: {study_info['tissue']}}}
     \\vspace{{1cm}}
 
     % Date
@@ -137,10 +136,17 @@ def generate_pdf_report(
 \\section{{Study Information}}
 \\begin{{itemize}}
     \\item \\textbf{{GEO Accession:}} {study_info['geo_accession']}
-    \\item \\textbf{{Species:}} {study_info['organism']}
-    \\item \\textbf{{Tissue:}} {study_info['tissue']}
+    \\item \\textbf{{Status:}} {study_info.get('status', 'Not available')}
+    \\item \\textbf{{Title:}} {study_info['title']}
+    \\item \\textbf{{Source Name:}} {study_info.get('source_name', 'Not available')}
+    \\item \\textbf{{Organism:}} {study_info['organism']}
     \\item \\textbf{{Analysis Date:}} {{{datetime.now().strftime('%B %d, %Y')}}}
 \\end{{itemize}}
+
+% Add a link to the GEO page
+\\begin{{quote}}
+    \\textbf{{GEO Link:}} \\url{{{study_info.get('geo_url', f'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={study_info["geo_accession"]}')}}}
+\\end{{quote}}
 
 % Analysis parameters
 \\section{{Analysis Parameters}}

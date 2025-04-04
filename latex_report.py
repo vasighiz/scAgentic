@@ -191,7 +191,6 @@ def generate_latex_report(
         \\midrule
         Title & {sanitized_study_info.get('title', 'Not available')} \\\\
         Organism & {sanitized_study_info.get('organism', 'Not available')} \\\\
-        Tissue & {sanitized_study_info.get('tissue', 'Not available')} \\\\
         \\bottomrule
     \\end{{tabular}}
     \\caption{{Study metadata from GEO}}

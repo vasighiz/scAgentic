@@ -84,23 +84,25 @@ fg))
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
 (report.out) (report.out)
-(C:\Users\prgrm\AppData\Local\Programs\MiKTeX\tex/latex/base\omscmr.fd)
 [1{C:/Users/prgrm/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map} <./scagenti
-c_logo.png (PNG copy)>] (report.toc)
+c_logo.png>] (report.toc)
 
 pdfTeX warning (ext4): destination with the same identifier (name{page.1}) has 
 been already used, duplicate ignored
 <to be read again> 
                    \relax 
-l.64 \newpage
+l.63 \newpage
               [1]
-[2 <./dummy_plot.png>] (report.aux) )
+Overfull \hbox (37.52177pt too wide) in paragraph at lines 80--81
+[]\OT1/cmr/bx/n/12 GEO Link: [][]$\OT1/cmtt/m/n/12 https : / / www . ncbi . nlm
+ . nih . gov / geo / query / acc . cgi ? acc = GSE12345$[][] 
+
+[2] (report.aux) )
 (see the transcript file for additional information) <C:\Users\prgrm\AppData\Lo
 cal\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk><C:/Users/prgrm/AppDa
-ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbsy10.pfb><C:/Users/p
-rgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C
-:/Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr1
-2.pfb><C:/Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts
-/cm/cmsy10.pfb>
-Output written on report.pdf (3 pages, 1229009 bytes).
+ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/pr
+grm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/
+Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt12
+.pfb>
+Output written on report.pdf (3 pages, 50939 bytes).
 Transcript written on report.log.

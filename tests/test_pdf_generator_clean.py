@@ -58,6 +58,17 @@ def create_dummy_plot(output_dir: Path, filename: str = 'dummy_plot.png') -> Pat
     plt.close()
     return plot_path
 
+def create_dummy_logo(output_dir: Path, filename: str = 'scagentic_logo.png') -> Path:
+    """Create a dummy logo file for testing."""
+    plt.figure(figsize=(4, 4))
+    plt.text(0.5, 0.5, 'LOGO', ha='center', va='center', fontsize=24)
+    plt.axis('off')
+    
+    logo_path = output_dir / filename
+    plt.savefig(logo_path)
+    plt.close()
+    return logo_path
+
 def cleanup_test_dir(test_dir: Path) -> None:
     """Clean up the test directory before each test."""
     if test_dir.exists():
@@ -82,12 +93,15 @@ def test_generate_pdf_report_success():
     test_dir = TEST_OUTPUT_DIR / 'success_test'
     cleanup_test_dir(test_dir)
     
+    # Create dummy logo and plot
+    logo_path = create_dummy_logo(test_dir)
+    plot_path = create_dummy_plot(test_dir)
+    
     # Create test data
     study_info = {
         'title': 'Test Study',
         'geo_accession': 'GSE12345',
-        'organism': 'Homo sapiens',
-        'tissue': 'Brain'
+        'organism': 'Homo sapiens'
     }
     
     parameters = {
@@ -97,9 +111,6 @@ def test_generate_pdf_report_success():
         'n_top_genes': 2000,
         'n_pcs': 50
     }
-    
-    # Create dummy plot
-    plot_path = create_dummy_plot(test_dir)
     
     try:
         # Generate PDF
@@ -134,12 +145,14 @@ def test_generate_pdf_report_missing_plot():
     test_dir = TEST_OUTPUT_DIR / 'missing_plot_test'
     cleanup_test_dir(test_dir)
     
+    # Create dummy logo
+    logo_path = create_dummy_logo(test_dir)
+    
     # Create test data
     study_info = {
         'title': 'Test Study',
         'geo_accession': 'GSE12345',
-        'organism': 'Homo sapiens',
-        'tissue': 'Brain'
+        'organism': 'Homo sapiens'
     }
     
     parameters = {
@@ -181,12 +194,15 @@ def test_generate_pdf_report_with_special_chars():
     test_dir = TEST_OUTPUT_DIR / 'special_chars_test'
     cleanup_test_dir(test_dir)
     
+    # Create dummy logo and plot
+    logo_path = create_dummy_logo(test_dir)
+    plot_path = create_dummy_plot(test_dir)
+    
     # Create test data with special characters
     study_info = {
         'title': 'Test Study with % & _ # { } ~ ^ \\',
         'geo_accession': 'GSE12345_%',
-        'organism': 'Homo sapiens',
-        'tissue': 'Brain & Tissue'
+        'organism': 'Homo sapiens'
     }
     
     parameters = {
@@ -195,9 +211,6 @@ def test_generate_pdf_report_with_special_chars():
         'max_percent_mt': 20,
         'special_param': 'value with % & _ # { } ~ ^ \\'
     }
-    
-    # Create dummy plot
-    plot_path = create_dummy_plot(test_dir)
     
     try:
         # Generate PDF

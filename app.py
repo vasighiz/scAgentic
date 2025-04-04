@@ -486,9 +486,21 @@ def main():
                         'geo_accession': geo_id,
                         'title': f"Single-cell RNA-seq analysis of {geo_id}",
                         'organism': "Homo sapiens",  # Default, can be updated
-                        'tissue': "Not specified",  # Default, can be updated
                         'summary': "Single-cell RNA-seq analysis performed using scAgentic"
                     }
+                    
+                    # Fetch additional GEO metadata
+                    with st.spinner("Fetching GEO metadata..."):
+                        geo_metadata = fetch_geo_metadata(geo_id)
+                        # Update study info with fetched metadata
+                        st.session_state.study_info.update({
+                            'title': geo_metadata['title'],
+                            'organism': geo_metadata['organism'],
+                            'summary': geo_metadata['summary'],
+                            'status': geo_metadata['status'],
+                            'source_name': geo_metadata['source_name'],
+                            'geo_url': f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={geo_id}"
+                        })
                     
                     # Display data summary
                     st.success("Data loaded successfully!")
@@ -498,10 +510,26 @@ def main():
                             <ul>
                                 <li>Number of cells: {adata.n_obs:,}</li>
                                 <li>Number of genes: {adata.n_vars:,}</li>
-                                <li>GEO ID: {geo_id}</li>
+                                <li>GEO ID: <a href="{st.session_state.study_info['geo_url']}" target="_blank">{geo_id}</a></li>
                             </ul>
                         </div>
                     """, unsafe_allow_html=True)
+                    
+                    # Display GEO metadata in a two-column format
+                    st.markdown("### GEO Metadata")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**Title:**")
+                        st.markdown("**Status:**")
+                        st.markdown("**Source Name:**")
+                        st.markdown("**Organism:**")
+                    
+                    with col2:
+                        st.markdown(f"**{st.session_state.study_info['title']}**")
+                        st.markdown(f"**{st.session_state.study_info.get('status', 'Not available')}**")
+                        st.markdown(f"**{st.session_state.study_info.get('source_name', 'Not available')}**")
+                        st.markdown(f"**{st.session_state.study_info['organism']}**")
                     
                     # Add welcome message to chat
                     st.session_state.chat_history.append({
