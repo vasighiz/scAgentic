@@ -139,7 +139,7 @@ def generate_pdf_report(
     \\item \\textbf{{GEO Accession:}} {study_info['geo_accession']}
     \\item \\textbf{{Species:}} {study_info['organism']}
     \\item \\textbf{{Tissue:}} {study_info['tissue']}
-    \\item \\textbf{{Analysis Date:}} {datetime.now().strftime('%B %d, %Y')}
+    \\item \\textbf{{Analysis Date:}} {{{datetime.now().strftime('%B %d, %Y')}}}
 \\end{{itemize}}
 
 % Analysis parameters
@@ -173,7 +173,7 @@ def generate_pdf_report(
     
     # Add plots
     for i, plot_file in enumerate(plot_files, 1):
-        if check_file_exists(os.path.join(output_dir, plot_file)):
+        if os.path.exists(os.path.join(output_dir, plot_file)):
             latex_content += f"""
     \\begin{{figure}}[H]
         \\centering
@@ -193,14 +193,6 @@ def generate_pdf_report(
     with open(tex_path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(latex_content)
     
-    # Convert paths to forward slashes for LaTeX
-    tex_path = tex_path.replace('\\', '/')
-    output_dir = output_dir.replace('\\', '/')
-    
-    # Verify file exists before running pdflatex
-    if not os.path.exists(tex_path):
-        raise FileNotFoundError(f"LaTeX file not found: {tex_path}")
-    
     # Store original directory
     original_dir = os.getcwd()
     
@@ -217,25 +209,28 @@ def generate_pdf_report(
                 encoding='utf-8'
             )
             
-            # Always save logs, regardless of success/failure
-            with open(os.path.join(output_dir, 'pdflatex_stdout.log'), 'w', encoding='utf-8') as f:
+            # Save logs
+            with open('report.log', 'w', encoding='utf-8') as f:
                 f.write(result.stdout)
-            with open(os.path.join(output_dir, 'pdflatex_stderr.log'), 'w', encoding='utf-8') as f:
-                f.write(result.stderr)
+                if result.stderr:
+                    f.write('\n\nSTDERR:\n')
+                    f.write(result.stderr)
             
             if result.returncode != 0:
                 raise RuntimeError(
-                    "LaTeX compilation failed. See pdflatex_stdout.log and pdflatex_stderr.log for details."
+                    "LaTeX compilation failed. See report.log for details."
                 )
         
         # Rename the output to final_report.pdf
         if os.path.exists('report.pdf'):
+            if os.path.exists('final_report.pdf'):
+                os.remove('final_report.pdf')
             os.rename('report.pdf', 'final_report.pdf')
         else:
             raise FileNotFoundError("PDF file was not generated")
         
         # Clean up auxiliary files
-        for ext in ['.aux', '.log', '.out']:
+        for ext in ['.aux', '.out']:
             if os.path.exists(f'report{ext}'):
                 os.remove(f'report{ext}')
         

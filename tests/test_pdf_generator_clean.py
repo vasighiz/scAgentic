@@ -28,18 +28,11 @@ def print_latex_logs(test_dir: Path) -> None:
         with open(test_dir / 'report.tex', 'r', encoding='utf-8') as f:
             print(f.read())
     
-    # Print stdout log if it exists
-    if (test_dir / 'pdflatex_stdout.log').exists():
-        print("\npdflatex_stdout.log:")
+    # Print report.log if it exists
+    if (test_dir / 'report.log').exists():
+        print("\nreport.log:")
         print("-" * 80)
-        with open(test_dir / 'pdflatex_stdout.log', 'r', encoding='utf-8') as f:
-            print(f.read())
-    
-    # Print stderr log if it exists
-    if (test_dir / 'pdflatex_stderr.log').exists():
-        print("\npdflatex_stderr.log:")
-        print("-" * 80)
-        with open(test_dir / 'pdflatex_stderr.log', 'r', encoding='utf-8') as f:
+        with open(test_dir / 'report.log', 'r', encoding='utf-8') as f:
             print(f.read())
     
     print("=" * 80)
@@ -122,8 +115,7 @@ def test_generate_pdf_report_success():
         assert os.path.getsize(pdf_path) > 0, "Generated PDF is empty"
         
         # Verify log files exist
-        assert (test_dir / 'pdflatex_stdout.log').exists(), "stdout log not generated"
-        assert (test_dir / 'pdflatex_stderr.log').exists(), "stderr log not generated"
+        assert (test_dir / 'report.log').exists(), "log file not generated"
         
         print(f'✅ PDF generated successfully: {pdf_path}')
         
@@ -170,8 +162,7 @@ def test_generate_pdf_report_missing_plot():
         assert os.path.getsize(pdf_path) > 0, "Generated PDF is empty"
         
         # Verify log files exist
-        assert (test_dir / 'pdflatex_stdout.log').exists(), "stdout log not generated"
-        assert (test_dir / 'pdflatex_stderr.log').exists(), "stderr log not generated"
+        assert (test_dir / 'report.log').exists(), "log file not generated"
         
         print(f'✅ PDF generated successfully without plot: {pdf_path}')
         
@@ -222,8 +213,7 @@ def test_generate_pdf_report_with_special_chars():
         assert os.path.getsize(pdf_path) > 0, "Generated PDF is empty"
         
         # Verify log files exist
-        assert (test_dir / 'pdflatex_stdout.log').exists(), "stdout log not generated"
-        assert (test_dir / 'pdflatex_stderr.log').exists(), "stderr log not generated"
+        assert (test_dir / 'report.log').exists(), "log file not generated"
         
         print(f'✅ PDF generated successfully with special characters: {pdf_path}')
         

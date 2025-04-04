@@ -289,13 +289,11 @@ def generate_pdf_report_safe(
         st_context.error(f"Error generating PDF report: {str(e)}")
         
         # Print LaTeX logs if they exist
-        log_files = ['pdflatex_stdout.log', 'pdflatex_stderr.log', 'report.tex']
-        for log_file in log_files:
-            log_path = os.path.join(output_dir, log_file)
-            if os.path.exists(log_path):
-                st_context.error(f"\nContents of {log_file}:")
-                with open(log_path, 'r', encoding='utf-8') as f:
-                    st_context.code(f.read())
+        log_path = os.path.join(output_dir, 'report.log')
+        if os.path.exists(log_path):
+            st_context.error("\nContents of report.log:")
+            with open(log_path, 'r', encoding='utf-8') as f:
+                st_context.code(f.read())
         
         raise RuntimeError(f"PDF generation failed: {str(e)}")
 
