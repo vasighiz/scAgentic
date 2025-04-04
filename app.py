@@ -620,9 +620,18 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Quality Control',
-                            'description': 'Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content. The violin plots show: (1) The number of genes expressed in the count matrix, (2) The total counts per cell, and (3) The percentage of counts in mitochondrial genes.',
+                            'description': 'Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content. The violin plots show: (1) The number of genes expressed in the count matrix, (2) The total counts per cell, and (3) The percentage of counts in mitochondrial genes. It is useful to consider QC metrics jointly by inspecting a scatter plot colored by pct_counts_mt.',
                             'plot': 'qc_distributions.png'
                         })
+                    plt.close(fig)
+                    
+                    # Create QC scatter plot
+                    sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", color="pct_counts_mt", show=False)
+                    fig = plt.gcf()
+                    if fig.get_axes():
+                        fig.savefig(os.path.join(st.session_state.output_dir, 'qc_scatter.png'),
+                                  dpi=300, bbox_inches='tight')
+                        st.session_state.figures['qc_scatter'] = fig
                     plt.close(fig)
                     
                     # Filter cells
@@ -774,6 +783,7 @@ def main():
                         # Ensure all required plots exist
                         required_plots = [
                             'qc_distributions.png',
+                            'qc_scatter.png',
                             'highly_variable_genes.png',
                             'pca_variance.png',
                             'umap_clusters.png',
@@ -849,6 +859,11 @@ def main():
                     st.markdown(step['description'])
                     if step['plot'] and os.path.exists(os.path.join(st.session_state.output_dir, step['plot'])):
                         st.image(os.path.join(st.session_state.output_dir, step['plot']))
+                    
+                    # Display additional QC scatter plot for the Quality Control step
+                    if step['step'] == 'Quality Control' and os.path.exists(os.path.join(st.session_state.output_dir, 'qc_scatter.png')):
+                        st.markdown("**Additional QC Visualization:**")
+                        st.image(os.path.join(st.session_state.output_dir, 'qc_scatter.png'))
             
             # Download buttons
             col1, col2 = st.columns(2)

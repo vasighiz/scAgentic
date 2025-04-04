@@ -200,6 +200,17 @@ def generate_pdf_report(
     \\label{{fig:{step['plot'].replace('.png', '')}}}
 \\end{{figure}}
 """
+                
+                # Add additional QC scatter plot for the Quality Control step
+                if step['step'] == 'Quality Control' and os.path.exists(os.path.join(output_dir, 'qc_scatter.png')):
+                    latex_content += f"""
+\\begin{{figure}}[H]
+    \\centering
+    \\includegraphics[width=0.8\\textwidth]{{qc_scatter.png}}
+    \\caption{{Additional QC visualization: Scatter plot of total counts vs. number of genes, colored by mitochondrial content percentage}}
+    \\label{{fig:qc_scatter}}
+\\end{{figure}}
+"""
     
     latex_content += """
 \\end{document}
