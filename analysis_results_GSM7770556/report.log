@@ -72,7 +72,26 @@ ounter.sty)))
 (C:\Users\prgrm\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
 )
 (C:\Users\prgrm\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdf
-tex.def) (report.aux)
+tex.def) (report.aux
+
+LaTeX Warning: Label `fig:qc_distributions' multiply defined.
+
+
+LaTeX Warning: Label `fig:highly_variable_genes' multiply defined.
+
+
+LaTeX Warning: Label `fig:pca_variance' multiply defined.
+
+
+LaTeX Warning: Label `fig:umap' multiply defined.
+
+
+LaTeX Warning: Label `fig:umap_clusters' multiply defined.
+
+
+LaTeX Warning: Label `fig:de' multiply defined.
+
+)
 (C:\Users\prgrm\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mk
 ii
 [Loading MPS to PDF converter (version 2006.09.02).]
@@ -100,14 +119,22 @@ Overfull \hbox (49.87178pt too wide) in paragraph at lines 78--79
 [2 <./qc_distributions.png>]
 [3 <./highly_variable_genes.png>]
 [4 <./pca_variance.png>]
-[5 <./umap.png>]
-[6 <./umap_clusters.png>]
-[7 <./de.png>] (report.aux) )
+[5 <./umap.png> <./umap_clusters.png>]
+[6 <./de.png>]
+[7]
+[8]
+[9]
+[10]
+[11] (report.aux)
+
+LaTeX Warning: There were multiply-defined labels.
+
+ )
 (see the transcript file for additional information) <C:\Users\prgrm\AppData\Lo
 cal\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk><C:/Users/prgrm/AppDa
 ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/pr
 grm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/
 Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt12
 .pfb>
-Output written on report.pdf (8 pages, 2304661 bytes).
+Output written on report.pdf (12 pages, 2322021 bytes).
 Transcript written on report.log.

@@ -236,10 +236,11 @@ def generate_pdf_report_safe(
     study_info: dict,
     parameters: dict,
     plot_files: list[str],
-    st_context: Any
+    st_context: Any,
+    analysis_steps: list[dict] = None
 ) -> str:
     """
-    Safely generate a PDF report with proper error handling and logging.
+    Generate a PDF report with proper error handling.
     
     Args:
         output_dir: Directory to save report.tex and final_report.pdf
@@ -247,6 +248,7 @@ def generate_pdf_report_safe(
         parameters: Dictionary of preprocessing parameters
         plot_files: List of plot filenames in output_dir
         st_context: Streamlit context for displaying messages
+        analysis_steps: List of dictionaries containing analysis steps information
         
     Returns:
         Path to the generated PDF file
@@ -271,7 +273,8 @@ def generate_pdf_report_safe(
             output_dir=output_dir,
             study_info=study_info,
             parameters=parameters,
-            plot_files=plot_files
+            plot_files=plot_files,
+            analysis_steps=analysis_steps
         )
         
         # Verify PDF was generated
@@ -584,10 +587,17 @@ def main():
         if 'preprocessing_done' not in st.session_state:
             st.session_state.preprocessing_done = False
         
+        # Initialize analysis steps list if not exists
+        if 'analysis_steps' not in st.session_state:
+            st.session_state.analysis_steps = []
+        
         # Run automatic preprocessing if data is loaded but preprocessing hasn't been done
         if not st.session_state.preprocessing_done:
             with st.spinner("Running analysis pipeline..."):
                 try:
+                    # Clear previous analysis steps
+                    st.session_state.analysis_steps = []
+                    
                     # Quality Control
                     st.markdown('<p class="step-message">Running quality control...</p>', unsafe_allow_html=True)
                     adata.var['mt'] = adata.var_names.str.startswith('MT-')
@@ -607,6 +617,12 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'qc_distributions.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['qc_distributions'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Quality Control',
+                            'description': 'Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content.',
+                            'plot': 'qc_distributions.png'
+                        })
                     plt.close(fig)
                     
                     # Filter cells
@@ -615,11 +631,25 @@ def main():
                     sc.pp.filter_genes(adata, min_cells=st.session_state.params['min_cells'])
                     adata = adata[adata.obs['pct_counts_mt'] < st.session_state.params['max_percent_mt'], :]
                     
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Filtering Cells',
+                        'description': f'Filtered cells with at least {st.session_state.params["min_genes"]} genes, genes expressed in at least {st.session_state.params["min_cells"]} cells, and cells with less than {st.session_state.params["max_percent_mt"]}% mitochondrial content.',
+                        'plot': None
+                    })
+                    
                     # Normalize and scale
                     st.markdown('<p class="step-message">Normalizing and scaling data...</p>', unsafe_allow_html=True)
                     sc.pp.normalize_total(adata, target_sum=1e4)
                     sc.pp.log1p(adata)
                     sc.pp.scale(adata, max_value=10)
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Normalization and Scaling',
+                        'description': 'Normalized total counts per cell, applied log transformation, and scaled the data.',
+                        'plot': None
+                    })
                     
                     # Find HVGs
                     st.markdown('<p class="step-message">Finding highly variable genes...</p>', unsafe_allow_html=True)
@@ -632,6 +662,12 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'highly_variable_genes.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['highly_variable_genes'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Highly Variable Genes',
+                            'description': f'Identified the top {st.session_state.params["n_top_genes"]} highly variable genes for downstream analysis.',
+                            'plot': 'highly_variable_genes.png'
+                        })
                     plt.close(fig)
                     
                     # Run PCA
@@ -645,11 +681,24 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'pca_variance.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['pca_variance'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Principal Component Analysis',
+                            'description': f'Performed PCA on highly variable genes and visualized variance explained by the top {st.session_state.params["n_pcs"]} principal components.',
+                            'plot': 'pca_variance.png'
+                        })
                     plt.close(fig)
                     
                     # Compute neighborhood graph
                     st.markdown('<p class="step-message">Computing neighborhood graph...</p>', unsafe_allow_html=True)
                     sc.pp.neighbors(adata, n_neighbors=10, n_pcs=st.session_state.params['n_pcs'])
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Neighborhood Graph',
+                        'description': f'Computed the neighborhood graph using {st.session_state.params["n_pcs"]} principal components and 10 nearest neighbors.',
+                        'plot': None
+                    })
                     
                     # Run UMAP
                     st.markdown('<p class="step-message">Running UMAP...</p>', unsafe_allow_html=True)
@@ -662,6 +711,12 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'umap.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['umap'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'UMAP Visualization',
+                            'description': 'Generated UMAP dimensionality reduction visualization of the dataset.',
+                            'plot': 'umap.png'
+                        })
                     plt.close(fig)
                     
                     # Run clustering
@@ -675,6 +730,12 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'umap_clusters.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['umap_clusters'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Clustering',
+                            'description': f'Performed Leiden clustering with resolution {st.session_state.params["resolution"]} and visualized clusters on UMAP.',
+                            'plot': 'umap_clusters.png'
+                        })
                     plt.close(fig)
                     
                     # Run DE analysis
@@ -688,6 +749,12 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'de.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['de'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Differential Expression Analysis',
+                            'description': 'Identified differentially expressed genes between clusters using the Wilcoxon rank-sum test.',
+                            'plot': 'de.png'
+                        })
                     plt.close(fig)
                     
                     # Generate violin plots for top DE genes
@@ -734,7 +801,8 @@ def main():
                             study_info=st.session_state.study_info,
                             parameters=st.session_state.params,
                             plot_files=required_plots,
-                            st_context=st
+                            st_context=st,
+                            analysis_steps=st.session_state.analysis_steps
                         )
                         
                     except Exception as e:
@@ -780,7 +848,16 @@ def main():
         if st.session_state.preprocessing_done:
             st.markdown("### Analysis Results")
             
+            # Display analysis steps
+            st.markdown("#### Analysis Pipeline")
+            for i, step in enumerate(st.session_state.analysis_steps, 1):
+                with st.expander(f"{i}. {step['step']}", expanded=True):
+                    st.markdown(step['description'])
+                    if step['plot'] and os.path.exists(os.path.join(st.session_state.output_dir, step['plot'])):
+                        st.image(os.path.join(st.session_state.output_dir, step['plot']))
+            
             # Display plots in a grid
+            st.markdown("#### Visualization Gallery")
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("#### Quality Control")

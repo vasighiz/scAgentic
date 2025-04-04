@@ -37,7 +37,8 @@ def generate_pdf_report(
     output_dir: str,
     study_info: dict,
     parameters: dict,
-    plot_files: list[str]
+    plot_files: list[str],
+    analysis_steps: list[dict] = None
 ) -> str:
     """
     Generate a scientific-style LaTeX PDF report.
@@ -47,6 +48,7 @@ def generate_pdf_report(
         study_info: Dictionary containing study information
         parameters: Dictionary of preprocessing parameters
         plot_files: List of plot filenames in output_dir
+        analysis_steps: List of dictionaries containing analysis steps information
         
     Returns:
         Path to the generated PDF file
@@ -173,7 +175,34 @@ def generate_pdf_report(
     \\label{tab:parameters}
 \\end{table}
 
-% Results
+% Analysis Pipeline
+\\section{{Analysis Pipeline}}
+"""
+    
+    # Add analysis steps if provided
+    if analysis_steps:
+        for i, step in enumerate(analysis_steps, 1):
+            step_name = sanitize_latex(step['step'])
+            step_desc = sanitize_latex(step['description'])
+            
+            latex_content += f"""
+\\subsection{{{i}. {step_name}}}
+{step_desc}
+"""
+            
+            # Add plot if available
+            if step.get('plot') and os.path.exists(os.path.join(output_dir, step['plot'])):
+                latex_content += f"""
+\\begin{{figure}}[H]
+    \\centering
+    \\includegraphics[width=0.8\\textwidth]{{{step['plot']}}}
+    \\caption{{{sanitize_latex(step['step'])}}}
+    \\label{{fig:{step['plot'].replace('.png', '')}}}
+\\end{{figure}}
+"""
+    
+    # Results section
+    latex_content += """
 \\section{{Results}}
 """
     

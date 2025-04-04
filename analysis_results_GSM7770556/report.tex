@@ -99,7 +99,78 @@
     \label{tab:parameters}
 \end{table}
 
-% Results
+% Analysis Pipeline
+\section{{Analysis Pipeline}}
+
+\subsection{1. Quality Control}
+Calculated quality control metrics and generated distribution plots for genes, counts, and mitochondrial content.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{qc_distributions.png}
+    \caption{Quality Control}
+    \label{fig:qc_distributions}
+\end{figure}
+
+\subsection{2. Filtering Cells}
+Filtered cells with at least 200 genes, genes expressed in at least 3 cells, and cells with less than 20\% mitochondrial content.
+
+\subsection{3. Normalization and Scaling}
+Normalized total counts per cell, applied log transformation, and scaled the data.
+
+\subsection{4. Highly Variable Genes}
+Identified the top 2000 highly variable genes for downstream analysis.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{highly_variable_genes.png}
+    \caption{Highly Variable Genes}
+    \label{fig:highly_variable_genes}
+\end{figure}
+
+\subsection{5. Principal Component Analysis}
+Performed PCA on highly variable genes and visualized variance explained by the top 50 principal components.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pca_variance.png}
+    \caption{Principal Component Analysis}
+    \label{fig:pca_variance}
+\end{figure}
+
+\subsection{6. Neighborhood Graph}
+Computed the neighborhood graph using 50 principal components and 10 nearest neighbors.
+
+\subsection{7. UMAP Visualization}
+Generated UMAP dimensionality reduction visualization of the dataset.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{umap.png}
+    \caption{UMAP Visualization}
+    \label{fig:umap}
+\end{figure}
+
+\subsection{8. Clustering}
+Performed Leiden clustering with resolution 0.5 and visualized clusters on UMAP.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{umap_clusters.png}
+    \caption{Clustering}
+    \label{fig:umap_clusters}
+\end{figure}
+
+\subsection{9. Differential Expression Analysis}
+Identified differentially expressed genes between clusters using the Wilcoxon rank-sum test.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{de.png}
+    \caption{Differential Expression Analysis}
+    \label{fig:de}
+\end{figure}
+
 \section{{Results}}
 
     \begin{figure}[H]
