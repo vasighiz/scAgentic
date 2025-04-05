@@ -880,6 +880,12 @@ def main():
                             fig.savefig(os.path.join(st.session_state.output_dir, 'umap_doublets.png'),
                                       dpi=300, bbox_inches='tight')
                             st.session_state.figures['umap_doublets'] = fig
+                            # Add step to analysis steps
+                            st.session_state.analysis_steps.append({
+                                'step': 'Doublet Detection Assessment',
+                                'description': 'We re-assess the doublet detection results by visualizing the predicted doublets and doublet scores on the UMAP embedding. This allows us to identify if any clusters are enriched for predicted doublets, which might indicate technical artifacts rather than biological signals. The visualization shows the Leiden clusters, predicted doublets, and doublet scores to help identify potential issues.',
+                                'plot': 'umap_doublets.png'
+                            })
                         plt.close(fig)
                     
                     # Plot UMAP with QC metrics
