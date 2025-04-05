@@ -862,6 +862,47 @@ def main():
                         })
                     plt.close(fig)
                     
+                    # Re-assess quality control and cell filtering
+                    st.markdown('<p class="step-message">Re-assessing quality control and cell filtering...</p>', unsafe_allow_html=True)
+                    
+                    # Check if doublet detection was performed
+                    if 'predicted_doublet' in adata.obs.columns and 'doublet_score' in adata.obs.columns:
+                        # Plot UMAP with doublet information
+                        sc.pl.umap(
+                            adata,
+                            color=["leiden", "predicted_doublet", "doublet_score"],
+                            wspace=0.5,  # increase horizontal space between panels
+                            size=3,
+                            show=False
+                        )
+                        fig = plt.gcf()
+                        if fig.get_axes():
+                            fig.savefig(os.path.join(st.session_state.output_dir, 'umap_doublets.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['umap_doublets'] = fig
+                        plt.close(fig)
+                    
+                    # Plot UMAP with QC metrics
+                    sc.pl.umap(
+                        adata,
+                        color=["leiden", "total_counts", "pct_counts_mt", "n_genes_by_counts"],
+                        wspace=0.5,
+                        ncols=2,
+                        show=False
+                    )
+                    fig = plt.gcf()
+                    if fig.get_axes():
+                        fig.savefig(os.path.join(st.session_state.output_dir, 'umap_qc.png'),
+                                  dpi=300, bbox_inches='tight')
+                        st.session_state.figures['umap_qc'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Re-assess Quality Control and Cell Filtering',
+                            'description': 'As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. This allows us to identify if any clusters are enriched for cells with poor quality metrics, which might indicate technical artifacts rather than biological signals.',
+                            'plot': 'umap_qc.png'
+                        })
+                    plt.close(fig)
+                    
                     # Run DE analysis
                     st.markdown('<p class="step-message">Running differential expression analysis...</p>', unsafe_allow_html=True)
                     sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon')
@@ -911,7 +952,7 @@ def main():
                         ]
                         
                         # Add optional plots that may not exist
-                        optional_plots = ['pca_metrics.png', 'umap_sample.png']
+                        optional_plots = ['pca_metrics.png', 'umap_sample.png', 'umap_qc.png', 'umap_doublets.png']
                         
                         # Check for missing required plots
                         missing_plots = []

@@ -9,4 +9,5 @@
 \contentsline {subsection}{\numberline {3.6}6. Dimensionality Reduction}{4}{subsection.3.6}%
 \contentsline {subsection}{\numberline {3.7}7. Nearest Neighbor Graph Construction}{5}{subsection.3.7}%
 \contentsline {subsection}{\numberline {3.8}8. Clustering}{5}{subsection.3.8}%
-\contentsline {subsection}{\numberline {3.9}9. Differential Expression Analysis}{5}{subsection.3.9}%
+\contentsline {subsection}{\numberline {3.9}9. Re-assess Quality Control and Cell Filtering}{5}{subsection.3.9}%
+\contentsline {subsection}{\numberline {3.10}10. Differential Expression Analysis}{6}{subsection.3.10}%

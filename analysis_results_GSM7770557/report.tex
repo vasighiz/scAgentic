@@ -163,7 +163,17 @@ As with Seurat and many other frameworks, we recommend the Leiden graph-clusteri
     \label{fig:umap_clusters}
 \end{figure}
 
-\subsection{9. Differential Expression Analysis}
+\subsection{9. Re-assess Quality Control and Cell Filtering}
+As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. This allows us to identify if any clusters are enriched for cells with poor quality metrics, which might indicate technical artifacts rather than biological signals.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{umap_qc.png}
+    \caption{Re-assess Quality Control and Cell Filtering}
+    \label{fig:umap_qc}
+\end{figure}
+
+\subsection{10. Differential Expression Analysis}
 Identified differentially expressed genes between clusters using the Wilcoxon rank-sum test.
 
 \begin{figure}[H]
