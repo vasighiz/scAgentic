@@ -643,9 +643,31 @@ def main():
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
                         'step': 'Filtering Cells',
-                        'description': f'Filtered cells with at least {st.session_state.params["min_genes"]} genes, genes expressed in at least {st.session_state.params["min_cells"]} cells, and cells with less than {st.session_state.params["max_percent_mt"]}% mitochondrial content.',
+                        'description': f'Based on the QC metric plots, one could now remove cells that have too many mitochondrial genes expressed or too many total counts by setting manual or automatic thresholds. However, sometimes what appears to be poor QC metrics can be driven by real biology so we suggest starting with a very permissive filtering strategy and revisiting it at a later point. We therefore now only filter cells and genes based on the Quality Control plots and report these filtered cells and genes in this section. Additionally, it is important to note that for datasets with multiple batches, quality control should be performed for each sample individually as quality control thresholds can vary substantially between batches.\n\nFiltered cells with at least {st.session_state.params["min_genes"]} genes, genes expressed in at least {st.session_state.params["min_cells"]} cells, and cells with less than {st.session_state.params["max_percent_mt"]}% mitochondrial content.',
                         'plot': None
                     })
+                    
+                    # Doublet detection
+                    st.markdown('<p class="step-message">Running doublet detection...</p>', unsafe_allow_html=True)
+                    
+                    # Check if 'sample' column exists in adata.obs
+                    batch_key = "sample" if "sample" in adata.obs.columns else None
+                    
+                    # Run scrublet for doublet detection
+                    try:
+                        sc.pp.scrublet(adata, batch_key=batch_key)
+                        
+                        # Filter out predicted doublets
+                        adata = adata[~adata.obs['predicted_doublet'], :]
+                        
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Doublet Detection',
+                            'description': 'As a next step, we run a doublet detection algorithm. Identifying doublets is crucial as they can lead to misclassifications or distortions in downstream analysis steps. Scanpy contains the doublet detection method Scrublet [Wolock2019]. Scrublet predicts cell doublets using a nearest-neighbor classifier of observed transcriptomes and simulated doublets. One can either filter directly on predicted_doublet or use the doublet_score later during clustering to filter clusters with high doublet scores. In this step, we filter directly on predicted_doublet. You can change it later by interacting in the chat.',
+                            'plot': None
+                        })
+                    except Exception as e:
+                        st.warning(f"Doublet detection failed: {str(e)}. Continuing with the analysis pipeline.")
                     
                     # Normalize and scale
                     st.markdown('<p class="step-message">Normalizing and scaling data...</p>', unsafe_allow_html=True)
@@ -827,11 +849,14 @@ def main():
                             <ul>
                                 <li>Filtered cells: {:,}</li>
                                 <li>Filtered genes: {:,}</li>
+                                <li>Doublets removed: {:,}</li>
                                 <li>Number of clusters: {}</li>
                             </ul>
                             <p>You can now adjust parameters and re-run specific steps through the chat interface.</p>
                         </div>
-                    """.format(adata.n_obs, adata.n_vars, len(adata.obs['leiden'].unique())), 
+                    """.format(adata.n_obs, adata.n_vars, 
+                               int(adata.obs['predicted_doublet'].sum()) if 'predicted_doublet' in adata.obs.columns else 0, 
+                               len(adata.obs['leiden'].unique())), 
                     unsafe_allow_html=True)
                     
                     # Add completion message to chat

@@ -98,8 +98,8 @@ Overfull \hbox (49.87178pt too wide) in paragraph at lines 78--79
  . nih . gov / geo / query / acc . cgi ? acc = GSM7770556$[][] 
 
 [2 <./qc_distributions.png>]
-[3 <./qc_scatter.png> <./highly_variable_genes.png>]
-[4 <./pca_variance.png>]
+[3 <./qc_scatter.png>]
+[4 <./highly_variable_genes.png> <./pca_variance.png>]
 [5 <./umap_clusters.png> <./de.png>] (report.aux) )
 (see the transcript file for additional information) <C:\Users\prgrm\AppData\Lo
 cal\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk><C:/Users/prgrm/AppDa
@@ -107,5 +107,5 @@ ta/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/pr
 grm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/
 Users/prgrm/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt12
 .pfb>
-Output written on report.pdf (6 pages, 2396858 bytes).
+Output written on report.pdf (6 pages, 2397956 bytes).
 Transcript written on report.log.
