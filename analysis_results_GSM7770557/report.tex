@@ -70,7 +70,7 @@
     \item \textbf{Title:} sample 8510, patient 1 post-treatment biopsy, scRNA-seq
     \item \textbf{Source Name:} brain
     \item \textbf{Organism:} Homo sapiens
-    \item \textbf{Analysis Date:} {April 04, 2025}
+    \item \textbf{Analysis Date:} {April 05, 2025}
 \end{itemize}
 
 % Add a link to the GEO page
@@ -150,11 +150,11 @@ Reduce the dimensionality of the data by running principal component analysis (P
     \label{fig:pca_metrics}
 \end{figure}
 
-\subsection{7. Neighborhood Graph}
-Computed the neighborhood graph using 50 principal components and 10 nearest neighbors.
+\subsection{7. Nearest Neighbor Graph Construction}
+We compute the neighborhood graph of cells using the PCA representation of the data. This graph can then be embedded in two dimensions for visualization with UMAP (McInnes et al., 2018). If you inspect batch effects in your UMAP it can be beneficial to integrate across samples and perform batch correction/integration. We use scanorama and scvi-tools for batch integration.
 
 \subsection{8. Clustering}
-Performed Leiden clustering with resolution 0.5 and visualized clusters on UMAP.
+As with Seurat and many other frameworks, we recommend the Leiden graph-clustering method (community detection based on optimizing modularity) [Traag2019]. Note that Leiden clustering directly clusters the neighborhood graph of cells, which we already computed in the previous section.
 
 \begin{figure}[H]
     \centering

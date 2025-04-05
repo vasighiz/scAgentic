@@ -809,8 +809,8 @@ def main():
                     
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
-                        'step': 'Neighborhood Graph',
-                        'description': f'Computed the neighborhood graph using {st.session_state.params["n_pcs"]} principal components and 10 nearest neighbors.',
+                        'step': 'Nearest Neighbor Graph Construction',
+                        'description': 'We compute the neighborhood graph of cells using the PCA representation of the data. This graph can then be embedded in two dimensions for visualization with UMAP (McInnes et al., 2018). If you inspect batch effects in your UMAP it can be beneficial to integrate across samples and perform batch correction/integration. We use scanorama and scvi-tools for batch integration.',
                         'plot': None
                     })
                     
@@ -818,19 +818,34 @@ def main():
                     st.markdown('<p class="step-message">Running UMAP...</p>', unsafe_allow_html=True)
                     sc.tl.umap(adata)
                     
-                    # Plot UMAP
-                    sc.pl.umap(adata, show=False)
-                    fig = plt.gcf()
-                    if fig.get_axes():
-                        fig.savefig(os.path.join(st.session_state.output_dir, 'umap.png'),
-                                  dpi=300, bbox_inches='tight')
-                        st.session_state.figures['umap'] = fig
-                        # UMAP visualization step removed as requested
-                    plt.close(fig)
+                    # Plot UMAP with sample information if available
+                    if 'sample' in adata.obs.columns:
+                        sc.pl.umap(
+                            adata,
+                            color="sample",
+                            size=2,  # Setting a smaller point size to prevent overlap
+                            show=False
+                        )
+                        fig = plt.gcf()
+                        if fig.get_axes():
+                            fig.savefig(os.path.join(st.session_state.output_dir, 'umap_sample.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['umap_sample'] = fig
+                            # Add UMAP visualization step
+                            st.session_state.analysis_steps.append({
+                                'step': 'UMAP Visualization',
+                                'description': 'UMAP (Uniform Manifold Approximation and Projection) is a dimensionality reduction technique that provides a non-linear embedding of the data. We visualize the UMAP embedding colored by sample to identify potential batch effects. If batch effects are observed, batch correction methods like scanorama or scvi-tools can be applied.',
+                                'plot': 'umap_sample.png'
+                            })
+                        plt.close(fig)
+                    else:
+                        # If 'sample' column doesn't exist, skip UMAP visualization and move directly to clustering
+                        st.info("No 'sample' column found in the dataset. Skipping UMAP visualization and proceeding to clustering.")
                     
                     # Run clustering
                     st.markdown('<p class="step-message">Running clustering...</p>', unsafe_allow_html=True)
-                    sc.tl.leiden(adata, resolution=st.session_state.params['resolution'])
+                    # Using the igraph implementation and a fixed number of iterations for faster clustering
+                    sc.tl.leiden(adata, resolution=st.session_state.params['resolution'], flavor="igraph", n_iterations=2)
                     
                     # Plot UMAP with clusters
                     sc.pl.umap(adata, color=['leiden'], show=False)
@@ -839,10 +854,10 @@ def main():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'umap_clusters.png'),
                                   dpi=300, bbox_inches='tight')
                         st.session_state.figures['umap_clusters'] = fig
-                        # Add step to analysis steps
+                        # Add step to analysis steps with the requested description
                         st.session_state.analysis_steps.append({
                             'step': 'Clustering',
-                            'description': f'Performed Leiden clustering with resolution {st.session_state.params["resolution"]} and visualized clusters on UMAP.',
+                            'description': 'As with Seurat and many other frameworks, we recommend the Leiden graph-clustering method (community detection based on optimizing modularity) [Traag2019]. Note that Leiden clustering directly clusters the neighborhood graph of cells, which we already computed in the previous section.',
                             'plot': 'umap_clusters.png'
                         })
                     plt.close(fig)
@@ -896,7 +911,7 @@ def main():
                         ]
                         
                         # Add optional plots that may not exist
-                        optional_plots = ['pca_metrics.png']
+                        optional_plots = ['pca_metrics.png', 'umap_sample.png']
                         
                         # Check for missing required plots
                         missing_plots = []
@@ -914,7 +929,8 @@ def main():
                             plot_path = os.path.join(st.session_state.output_dir, plot)
                             if os.path.exists(plot_path):
                                 available_plots.append(plot)
-                            else:
+                            # Don't show warning for umap_sample.png as it's expected to be missing for datasets without sample column
+                            elif plot != 'umap_sample.png':
                                 st.warning(f"Optional plot '{plot}' not found. This plot will not be included in the PDF report.")
                         
                         # Generate PDF report with proper error handling
