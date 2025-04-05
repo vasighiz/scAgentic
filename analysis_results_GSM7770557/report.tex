@@ -164,13 +164,20 @@ As with Seurat and many other frameworks, we recommend the Leiden graph-clusteri
 \end{figure}
 
 \subsection{9. Re-assess Quality Control and Cell Filtering}
-As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. This allows us to identify if any clusters are enriched for cells with poor quality metrics, which might indicate technical artifacts rather than biological signals.
+As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. Additionally, we visualize the distribution of predicted doublets and doublet scores across clusters to assess the quality of our doublet detection.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{umap_qc.png}
     \caption{Re-assess Quality Control and Cell Filtering}
     \label{fig:umap_qc}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{umap_doublets_qc.png}
+    \caption{Re-assess Quality Control and Cell Filtering}
+    \label{fig:umap_doublets_qc}
 \end{figure}
 
 \subsection{10. Differential Expression Analysis}

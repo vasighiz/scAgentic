@@ -191,13 +191,17 @@ def generate_pdf_report(
 """
             
             # Add plot if available
-            if step.get('plot') and os.path.exists(os.path.join(output_dir, step['plot'])):
-                latex_content += f"""
+            if step.get('plot'):
+                # Handle multiple plots in a single step
+                plot_files = step['plot'].split(', ')
+                for plot_file in plot_files:
+                    if os.path.exists(os.path.join(output_dir, plot_file)):
+                        latex_content += f"""
 \\begin{{figure}}[H]
     \\centering
-    \\includegraphics[width=0.8\\textwidth]{{{step['plot']}}}
+    \\includegraphics[width=0.8\\textwidth]{{{plot_file}}}
     \\caption{{{sanitize_latex(step['step'])}}}
-    \\label{{fig:{step['plot'].replace('.png', '')}}}
+    \\label{{fig:{plot_file.replace('.png', '')}}}
 \\end{{figure}}
 """
                 

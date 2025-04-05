@@ -865,33 +865,16 @@ def main():
                     # Re-assess quality control and cell filtering
                     st.markdown('<p class="step-message">Re-assessing quality control and cell filtering...</p>', unsafe_allow_html=True)
                     
-                    # Check if doublet detection was performed
-                    if 'predicted_doublet' in adata.obs.columns and 'doublet_score' in adata.obs.columns:
-                        # Plot UMAP with doublet information
-                        sc.pl.umap(
-                            adata,
-                            color=["leiden", "predicted_doublet", "doublet_score"],
-                            wspace=0.5,  # increase horizontal space between panels
-                            size=3,
-                            show=False
-                        )
-                        fig = plt.gcf()
-                        if fig.get_axes():
-                            fig.savefig(os.path.join(st.session_state.output_dir, 'umap_doublets.png'),
-                                      dpi=300, bbox_inches='tight')
-                            st.session_state.figures['umap_doublets'] = fig
-                            # Add step to analysis steps
-                            st.session_state.analysis_steps.append({
-                                'step': 'Doublet Detection Assessment',
-                                'description': 'We re-assess the doublet detection results by visualizing the predicted doublets and doublet scores on the UMAP embedding. This allows us to identify if any clusters are enriched for predicted doublets, which might indicate technical artifacts rather than biological signals. The visualization shows the Leiden clusters, predicted doublets, and doublet scores to help identify potential issues.',
-                                'plot': 'umap_doublets.png'
-                            })
-                        plt.close(fig)
+                    # Create log-transformed QC metrics if they don't exist
+                    if 'log1p_total_counts' not in adata.obs.columns:
+                        adata.obs['log1p_total_counts'] = np.log1p(adata.obs['total_counts'])
+                    if 'log1p_n_genes_by_counts' not in adata.obs.columns:
+                        adata.obs['log1p_n_genes_by_counts'] = np.log1p(adata.obs['n_genes_by_counts'])
                     
                     # Plot UMAP with QC metrics
                     sc.pl.umap(
                         adata,
-                        color=["leiden", "total_counts", "pct_counts_mt", "n_genes_by_counts"],
+                        color=["leiden", "log1p_total_counts", "pct_counts_mt", "log1p_n_genes_by_counts"],
                         wspace=0.5,
                         ncols=2,
                         show=False
@@ -904,10 +887,30 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Re-assess Quality Control and Cell Filtering',
-                            'description': 'As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. This allows us to identify if any clusters are enriched for cells with poor quality metrics, which might indicate technical artifacts rather than biological signals.',
+                            'description': 'As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP.',
                             'plot': 'umap_qc.png'
                         })
                     plt.close(fig)
+                    
+                    # Add UMAP plot with doublet information if available
+                    if 'predicted_doublet' in adata.obs.columns and 'doublet_score' in adata.obs.columns:
+                        sc.pl.umap(
+                            adata,
+                            color=["leiden", "predicted_doublet", "doublet_score"],
+                            # increase horizontal space between panels
+                            wspace=0.5,
+                            ncols=2,
+                            show=False
+                        )
+                        fig = plt.gcf()
+                        if fig.get_axes():
+                            fig.savefig(os.path.join(st.session_state.output_dir, 'umap_doublets_qc.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['umap_doublets_qc'] = fig
+                            # Update the analysis step to include the new plot
+                            st.session_state.analysis_steps[-1]['description'] += ' Additionally, we visualize the distribution of predicted doublets and doublet scores across clusters to assess the quality of our doublet detection.'
+                            st.session_state.analysis_steps[-1]['plot'] = 'umap_qc.png, umap_doublets_qc.png'
+                        plt.close(fig)
                     
                     # Run DE analysis
                     st.markdown('<p class="step-message">Running differential expression analysis...</p>', unsafe_allow_html=True)
@@ -958,7 +961,7 @@ def main():
                         ]
                         
                         # Add optional plots that may not exist
-                        optional_plots = ['pca_metrics.png', 'umap_sample.png', 'umap_qc.png', 'umap_doublets.png']
+                        optional_plots = ['pca_metrics.png', 'umap_sample.png']
                         
                         # Check for missing required plots
                         missing_plots = []
@@ -1041,8 +1044,12 @@ def main():
             for i, step in enumerate(st.session_state.analysis_steps, 1):
                 with st.expander(f"{i}. {step['step']}", expanded=True):
                     st.markdown(step['description'])
-                    if step['plot'] and os.path.exists(os.path.join(st.session_state.output_dir, step['plot'])):
-                        st.image(os.path.join(st.session_state.output_dir, step['plot']))
+                    if step['plot']:
+                        # Handle multiple plots in a single step
+                        plot_files = step['plot'].split(', ')
+                        for plot_file in plot_files:
+                            if os.path.exists(os.path.join(st.session_state.output_dir, plot_file)):
+                                st.image(os.path.join(st.session_state.output_dir, plot_file))
                     
                     # Display additional QC scatter plot for the Quality Control step
                     if step['step'] == 'Quality Control' and os.path.exists(os.path.join(st.session_state.output_dir, 'qc_scatter.png')):
