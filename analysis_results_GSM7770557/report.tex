@@ -130,13 +130,13 @@ As a next step, we run a doublet detection algorithm. Identifying doublets is cr
 \subsection{4. Normalization and Scaling}
 The next preprocessing step is normalization. A common approach is count depth scaling with subsequent log plus one (log1p) transformation. Count depth scaling normalizes the data to a "size factor" such as the median count depth in the dataset, ten thousand (CP10k) or one million (CPM, counts per million). We are applying median count depth normalization with log1p transformation (AKA log1PF). The size factor for count depth scaling can be controlled via target\_sum in pp.normalize\_total. After normalization, we scaled the data to have zero mean and unit variance.
 
-\subsection{5. Highly Variable Genes}
-Identified the top 2000 highly variable genes for downstream analysis.
+\subsection{5. Feature Selection}
+As a next step, we want to reduce the dimensionality of the dataset and only include the most informative genes. This step is commonly known as feature selection. Here we use the scanpy function pp.highly\_variable\_genes that annotates highly variable genes by reproducing the implementations of Seurat [Satija2015], Cell Ranger [Zheng2017], and Seurat v3 [Stuart2019] depending on the chosen flavor. We selected the top 2000 highly variable genes for downstream analysis.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{highly_variable_genes.png}
-    \caption{Highly Variable Genes}
+    \caption{Feature Selection}
     \label{fig:highly_variable_genes}
 \end{figure}
 
