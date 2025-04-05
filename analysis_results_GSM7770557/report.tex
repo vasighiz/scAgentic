@@ -128,7 +128,7 @@ Filtered cells with at least 200 genes, genes expressed in at least 3 cells, and
 As a next step, we run a doublet detection algorithm. Identifying doublets is crucial as they can lead to misclassifications or distortions in downstream analysis steps. Scanpy contains the doublet detection method Scrublet [Wolock2019]. Scrublet predicts cell doublets using a nearest-neighbor classifier of observed transcriptomes and simulated doublets. One can either filter directly on predicted\_doublet or use the doublet\_score later during clustering to filter clusters with high doublet scores. In this step, we filter directly on predicted\_doublet. You can change it later by interacting in the chat.
 
 \subsection{4. Normalization and Scaling}
-Normalized total counts per cell, applied log transformation, and scaled the data.
+The next preprocessing step is normalization. A common approach is count depth scaling with subsequent log plus one (log1p) transformation. Count depth scaling normalizes the data to a "size factor" such as the median count depth in the dataset, ten thousand (CP10k) or one million (CPM, counts per million). We are applying median count depth normalization with log1p transformation (AKA log1PF). The size factor for count depth scaling can be controlled via target\_sum in pp.normalize\_total. After normalization, we scaled the data to have zero mean and unit variance.
 
 \subsection{5. Highly Variable Genes}
 Identified the top 2000 highly variable genes for downstream analysis.

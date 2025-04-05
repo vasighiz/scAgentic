@@ -700,20 +700,31 @@ def main():
                     
                     # Normalize and scale
                     st.markdown('<p class="step-message">Normalizing and scaling data...</p>', unsafe_allow_html=True)
+                    
+                    # Save count data
+                    adata.layers["counts"] = adata.X.copy()
+                    
+                    # Normalizing to median total counts
                     sc.pp.normalize_total(adata, target_sum=1e4)
+                    # Logarithmize the data
                     sc.pp.log1p(adata)
                     sc.pp.scale(adata, max_value=10)
                     
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
                         'step': 'Normalization and Scaling',
-                        'description': 'Normalized total counts per cell, applied log transformation, and scaled the data.',
+                        'description': 'The next preprocessing step is normalization. A common approach is count depth scaling with subsequent log plus one (log1p) transformation. Count depth scaling normalizes the data to a "size factor" such as the median count depth in the dataset, ten thousand (CP10k) or one million (CPM, counts per million). We are applying median count depth normalization with log1p transformation (AKA log1PF). The size factor for count depth scaling can be controlled via target_sum in pp.normalize_total. After normalization, we scaled the data to have zero mean and unit variance.',
                         'plot': None
                     })
                     
                     # Find HVGs
                     st.markdown('<p class="step-message">Finding highly variable genes...</p>', unsafe_allow_html=True)
-                    sc.pp.highly_variable_genes(adata, n_top_genes=st.session_state.params['n_top_genes'])
+                    
+                    # Check if 'sample' column exists in adata.obs
+                    batch_key = "sample" if "sample" in adata.obs.columns else None
+                    
+                    # Run highly variable genes selection
+                    sc.pp.highly_variable_genes(adata, n_top_genes=st.session_state.params['n_top_genes'], batch_key=batch_key)
                     
                     # Plot HVGs
                     sc.pl.highly_variable_genes(adata, show=False)
@@ -724,8 +735,8 @@ def main():
                         st.session_state.figures['highly_variable_genes'] = fig
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
-                            'step': 'Highly Variable Genes',
-                            'description': f'Identified the top {st.session_state.params["n_top_genes"]} highly variable genes for downstream analysis.',
+                            'step': 'Feature Selection',
+                            'description': 'As a next step, we want to reduce the dimensionality of the dataset and only include the most informative genes. This step is commonly known as feature selection. Here we use the scanpy function pp.highly_variable_genes that annotates highly variable genes by reproducing the implementations of Seurat [Satija2015], Cell Ranger [Zheng2017], and Seurat v3 [Stuart2019] depending on the chosen flavor. We selected the top {n_top_genes} highly variable genes for downstream analysis.'.format(n_top_genes=st.session_state.params['n_top_genes']),
                             'plot': 'highly_variable_genes.png'
                         })
                     plt.close(fig)
