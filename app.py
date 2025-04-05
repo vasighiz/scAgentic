@@ -667,7 +667,36 @@ def main():
                             'plot': None
                         })
                     except Exception as e:
-                        st.warning(f"Doublet detection failed: {str(e)}. Continuing with the analysis pipeline.")
+                        error_message = str(e)
+                        if "No module named 'skimage'" in error_message:
+                            st.warning("""
+                                **Doublet Detection Failed: Missing Dependency**
+                                
+                                The doublet detection step requires the scikit-image package which is not installed.
+                                
+                                To install the missing dependency, run:
+                                ```
+                                pip install scikit-image
+                                ```
+                                
+                                After installing, restart the application and the doublet detection will work properly.
+                                
+                                Continuing with the analysis pipeline without doublet detection.
+                            """)
+                            # Add step to analysis steps with error information
+                            st.session_state.analysis_steps.append({
+                                'step': 'Doublet Detection',
+                                'description': '**Doublet Detection Failed: Missing Dependency**\n\nThe doublet detection step requires the scikit-image package which is not installed. To install the missing dependency, run: `pip install scikit-image`. After installing, restart the application and the doublet detection will work properly. The analysis pipeline continued without doublet detection.',
+                                'plot': None
+                            })
+                        else:
+                            st.warning(f"Doublet detection failed: {error_message}. Continuing with the analysis pipeline.")
+                            # Add step to analysis steps with error information
+                            st.session_state.analysis_steps.append({
+                                'step': 'Doublet Detection',
+                                'description': f'**Doublet Detection Failed**\n\nThe doublet detection step encountered an error: {error_message}. The analysis pipeline continued without doublet detection.',
+                                'plot': None
+                            })
                     
                     # Normalize and scale
                     st.markdown('<p class="step-message">Normalizing and scaling data...</p>', unsafe_allow_html=True)
