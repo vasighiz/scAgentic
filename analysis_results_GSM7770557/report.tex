@@ -140,14 +140,14 @@ As a next step, we want to reduce the dimensionality of the dataset and only inc
     \label{fig:highly_variable_genes}
 \end{figure}
 
-\subsection{6. Principal Component Analysis}
-Performed PCA on highly variable genes and visualized variance explained by the top 50 principal components.
+\subsection{6. Dimensionality Reduction}
+Reduce the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data. We inspect the contribution of single PCs to the total variance in the data. This gives us information about how many PCs we should consider in order to compute the neighborhood relations of cells, e.g. used in the clustering function Leiden or tSNE. In experience, there does not seem to be signifigant downside to overestimating the numer of principal components. We can also plot the principal components to see if there are any potentially undesired features (e.g. QC metrics) driving signifigant variation in this dataset. In the case there isn't anything too alarming, but it's still a good idea to explore this.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{pca_variance.png}
-    \caption{Principal Component Analysis}
-    \label{fig:pca_variance}
+    \includegraphics[width=0.8\textwidth]{pca_metrics.png}
+    \caption{Dimensionality Reduction}
+    \label{fig:pca_metrics}
 \end{figure}
 
 \subsection{7. Neighborhood Graph}

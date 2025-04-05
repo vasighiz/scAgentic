@@ -746,7 +746,7 @@ def main():
                     sc.tl.pca(adata, use_highly_variable=True)
                     
                     # Plot PCA variance ratio
-                    sc.pl.pca_variance_ratio(adata, n_pcs=st.session_state.params['n_pcs'], show=False)
+                    sc.pl.pca_variance_ratio(adata, n_pcs=st.session_state.params['n_pcs'], log=True, show=False)
                     fig = plt.gcf()
                     if fig.get_axes():
                         fig.savefig(os.path.join(st.session_state.output_dir, 'pca_variance.png'),
@@ -754,11 +754,54 @@ def main():
                         st.session_state.figures['pca_variance'] = fig
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
-                            'step': 'Principal Component Analysis',
-                            'description': f'Performed PCA on highly variable genes and visualized variance explained by the top {st.session_state.params["n_pcs"]} principal components.',
+                            'step': 'Dimensionality Reduction',
+                            'description': 'Reduce the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data. We inspect the contribution of single PCs to the total variance in the data. This gives us information about how many PCs we should consider in order to compute the neighborhood relations of cells, e.g. used in the clustering function Leiden or tSNE. In experience, there does not seem to be signifigant downside to overestimating the numer of principal components.',
                             'plot': 'pca_variance.png'
                         })
                     plt.close(fig)
+                    
+                    # Plot PCA with sample and QC metrics
+                    if 'sample' in adata.obs.columns:
+                        # Set a more vibrant color palette for better visibility
+                        sc.settings.palette = 'viridis'  # Using viridis palette which is more vibrant and colorblind-friendly
+                        sc.pl.pca(
+                            adata,
+                            color=["sample", "sample", "pct_counts_mt", "pct_counts_mt"],
+                            dimensions=[(0, 1), (2, 3), (0, 1), (2, 3)],
+                            ncols=2,
+                            size=8,
+                            show=False
+                        )
+                        fig = plt.gcf()
+                        if fig.get_axes():
+                            fig.savefig(os.path.join(st.session_state.output_dir, 'pca_metrics.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['pca_metrics'] = fig
+                            # Update the analysis step with additional information
+                            st.session_state.analysis_steps[-1]['description'] += ' We can also plot the principal components to see if there are any potentially undesired features (e.g. batch, QC metrics) driving signifigant variation in this dataset. In the case there isn\'t anything too alarming, but it\'s still a good idea to explore this.'
+                            st.session_state.analysis_steps[-1]['plot'] = 'pca_metrics.png'
+                        plt.close(fig)
+                    else:
+                        # If 'sample' column doesn't exist, create a simplified PCA plot with just QC metrics
+                        # Set a more vibrant color palette for better visibility
+                        sc.settings.palette = 'viridis'  # Using viridis palette which is more vibrant and colorblind-friendly
+                        sc.pl.pca(
+                            adata,
+                            color=["pct_counts_mt", "pct_counts_mt"],
+                            dimensions=[(0, 1), (2, 3)],
+                            ncols=2,
+                            size=8,
+                            show=False
+                        )
+                        fig = plt.gcf()
+                        if fig.get_axes():
+                            fig.savefig(os.path.join(st.session_state.output_dir, 'pca_metrics.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['pca_metrics'] = fig
+                            # Update the analysis step with additional information
+                            st.session_state.analysis_steps[-1]['description'] += ' We can also plot the principal components to see if there are any potentially undesired features (e.g. QC metrics) driving signifigant variation in this dataset. In the case there isn\'t anything too alarming, but it\'s still a good idea to explore this.'
+                            st.session_state.analysis_steps[-1]['plot'] = 'pca_metrics.png'
+                        plt.close(fig)
                     
                     # Compute neighborhood graph
                     st.markdown('<p class="step-message">Computing neighborhood graph...</p>', unsafe_allow_html=True)
@@ -852,6 +895,10 @@ def main():
                             'de.png'
                         ]
                         
+                        # Add optional plots that may not exist
+                        optional_plots = ['pca_metrics.png']
+                        
+                        # Check for missing required plots
                         missing_plots = []
                         for plot in required_plots:
                             plot_path = os.path.join(st.session_state.output_dir, plot)
@@ -861,12 +908,21 @@ def main():
                         if missing_plots:
                             raise FileNotFoundError(f"Missing required plots: {', '.join(missing_plots)}")
                         
+                        # Check for optional plots and add them if they exist
+                        available_plots = required_plots.copy()
+                        for plot in optional_plots:
+                            plot_path = os.path.join(st.session_state.output_dir, plot)
+                            if os.path.exists(plot_path):
+                                available_plots.append(plot)
+                            else:
+                                st.warning(f"Optional plot '{plot}' not found. This plot will not be included in the PDF report.")
+                        
                         # Generate PDF report with proper error handling
                         pdf_path = generate_pdf_report_safe(
                             output_dir=st.session_state.output_dir,
                             study_info=st.session_state.study_info,
                             parameters=st.session_state.params,
-                            plot_files=required_plots,
+                            plot_files=available_plots,
                             st_context=st,
                             analysis_steps=st.session_state.analysis_steps
                         )
