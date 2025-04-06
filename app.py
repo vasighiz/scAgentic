@@ -887,7 +887,7 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Re-assess Quality Control and Cell Filtering',
-                            'description': 'As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP.',
+                            'description': 'As indicated before, we will now re-assess our filtering strategy by visualizing different QC metrics using UMAP. Additionally, we visualize the distribution of predicted doublets and doublet scores across clusters to assess the quality of our doublet detection. This helps identify if certain clusters are enriched for doublets, which might indicate technical artifacts rather than biological cell types.',
                             'plot': 'umap_qc.png'
                         })
                     plt.close(fig)
@@ -908,7 +908,6 @@ def main():
                                       dpi=300, bbox_inches='tight')
                             st.session_state.figures['umap_doublets_qc'] = fig
                             # Update the analysis step to include the new plot
-                            st.session_state.analysis_steps[-1]['description'] += ' Additionally, we visualize the distribution of predicted doublets and doublet scores across clusters to assess the quality of our doublet detection.'
                             st.session_state.analysis_steps[-1]['plot'] = 'umap_qc.png, umap_doublets_qc.png'
                         plt.close(fig)
                     
