@@ -26,6 +26,8 @@ from typing import List, Dict, Any
 import re
 from datetime import datetime
 import subprocess
+import shutil
+import scipy.sparse as sp
 
 def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
     """
@@ -430,40 +432,144 @@ def main():
                     elif len(uploaded_files) >= 3:
                         # Check if all required 10X files are present
                         matrix_file = next((f for f in uploaded_files if any(x in f.name.lower() for x in ['matrix.mtx', 'matrix.mtx.gz'])), None)
-                        features_file = next((f for f in uploaded_files if any(x in f.name.lower() for x in ['features.tsv', 'features.tsv.gz'])), None)
+                        features_file = next((f for f in uploaded_files if any(x in f.name.lower() for x in ['features.tsv', 'features.tsv.gz', 'genes.tsv', 'genes.tsv.gz'])), None)
                         barcodes_file = next((f for f in uploaded_files if any(x in f.name.lower() for x in ['barcodes.tsv', 'barcodes.tsv.gz'])), None)
                         
                         if not all([matrix_file, features_file, barcodes_file]):
                             missing_files = []
                             if not matrix_file: missing_files.append("matrix.mtx or matrix.mtx.gz")
-                            if not features_file: missing_files.append("features.tsv or features.tsv.gz")
+                            if not features_file: missing_files.append("features.tsv or features.tsv.gz or genes.tsv or genes.tsv.gz")
                             if not barcodes_file: missing_files.append("barcodes.tsv or barcodes.tsv.gz")
                             raise ValueError(f"Missing required 10X files: {', '.join(missing_files)}")
                         
                         # Create temporary directory for 10X files
                         with tempfile.TemporaryDirectory() as temp_dir:
-                            # Save uploaded files
-                            matrix_path = os.path.join(temp_dir, "matrix.mtx.gz")
-                            features_path = os.path.join(temp_dir, "features.tsv.gz")
-                            barcodes_path = os.path.join(temp_dir, "barcodes.tsv.gz")
+                            # Save uploaded files with proper handling of compressed and uncompressed files
+                            matrix_path = os.path.join(temp_dir, "matrix.mtx")
+                            features_path = os.path.join(temp_dir, "features.tsv")
+                            barcodes_path = os.path.join(temp_dir, "barcodes.tsv")
                             
                             # Handle compressed and uncompressed files
                             def save_file(file_obj, target_path):
                                 if file_obj.name.endswith('.gz'):
-                                    with open(target_path, "wb") as f:
-                                        f.write(file_obj.getbuffer())
+                                    # If file is already compressed, decompress it
+                                    with gzip.open(file_obj, 'rb') as f_in:
+                                        with open(target_path, 'wb') as f_out:
+                                            f_out.write(f_in.read())
                                 else:
-                                    # Compress the file if it's not already compressed
-                                    with open(target_path, "wb") as f:
-                                        with gzip.GzipFile(fileobj=f, mode='wb') as gz:
-                                            gz.write(file_obj.getbuffer())
+                                    # If file is not compressed, save it as is
+                                    with open(target_path, 'wb') as f:
+                                        f.write(file_obj.getbuffer())
                             
+                            # Save the files
                             save_file(matrix_file, matrix_path)
                             save_file(features_file, features_path)
                             save_file(barcodes_file, barcodes_path)
                             
+                            # Create alternative filenames for different 10X formats
+                            alt_matrix_path = os.path.join(temp_dir, "matrix.mtx.gz")
+                            alt_features_path = os.path.join(temp_dir, "genes.tsv")
+                            alt_barcodes_path = os.path.join(temp_dir, "barcodes.tsv.gz")
+                            
+                            # Create copies for alternative filenames
+                            if os.path.exists(matrix_path):
+                                shutil.copy2(matrix_path, alt_matrix_path)
+                            if os.path.exists(features_path):
+                                shutil.copy2(features_path, alt_features_path)
+                            if os.path.exists(barcodes_path):
+                                shutil.copy2(barcodes_path, alt_barcodes_path)
+                            
+                            # Verify files were saved correctly
+                            if not all(os.path.exists(path) and os.path.getsize(path) > 0 for path in [matrix_path, features_path, barcodes_path]):
+                                missing_files = []
+                                if not os.path.exists(matrix_path) or os.path.getsize(matrix_path) == 0:
+                                    missing_files.append("matrix.mtx")
+                                if not os.path.exists(features_path) or os.path.getsize(features_path) == 0:
+                                    missing_files.append("features.tsv")
+                                if not os.path.exists(barcodes_path) or os.path.getsize(barcodes_path) == 0:
+                                    missing_files.append("barcodes.tsv")
+                                raise ValueError(f"Failed to save required 10X files: {', '.join(missing_files)}")
+                            
                             # Load 10X data
-                            adata = sc.read_10x_mtx(temp_dir)
+                            try:
+                                st.info(f"Loading 10X data from temporary directory: {temp_dir}")
+                                st.info(f"Files being used: matrix.mtx, features.tsv, barcodes.tsv")
+                                adata = sc.read_10x_mtx(temp_dir)
+                                st.success(f"Successfully loaded data with {adata.n_obs} cells and {adata.n_vars} genes")
+                            except Exception as e:
+                                st.warning(f"First attempt to load 10X data failed: {str(e)}")
+                                st.info("Trying alternative file naming convention...")
+                                
+                                # Try with alternative file naming convention
+                                try:
+                                    # Rename files to match alternative convention
+                                    if os.path.exists(matrix_path):
+                                        os.rename(matrix_path, os.path.join(temp_dir, "matrix.mtx.gz"))
+                                    if os.path.exists(features_path):
+                                        os.rename(features_path, os.path.join(temp_dir, "genes.tsv"))
+                                    if os.path.exists(barcodes_path):
+                                        os.rename(barcodes_path, os.path.join(temp_dir, "barcodes.tsv.gz"))
+                                    
+                                    # Try loading again
+                                    adata = sc.read_10x_mtx(temp_dir)
+                                    st.success(f"Successfully loaded data with {adata.n_obs} cells and {adata.n_vars} genes")
+                                except Exception as e2:
+                                    st.warning(f"Error loading 10X data with alternative naming: {str(e2)}")
+                                    st.info("Trying direct file reading as a last resort...")
+                                    
+                                    # Try direct file reading as a last resort
+                                    try:
+                                        # Read matrix file
+                                        import pandas as pd
+                                        import scipy.sparse as sp
+                                        
+                                        # Read barcodes
+                                        with open(barcodes_path, 'r') as f:
+                                            barcodes = [line.strip() for line in f]
+                                        
+                                        # Read features
+                                        features_df = pd.read_csv(features_path, sep='\t', header=None)
+                                        if features_df.shape[1] >= 2:
+                                            gene_names = features_df.iloc[:, 1].values
+                                        else:
+                                            gene_names = features_df.iloc[:, 0].values
+                                        
+                                        # Read matrix
+                                        with open(matrix_path, 'r') as f:
+                                            # Skip header lines
+                                            for _ in range(3):
+                                                f.readline()
+                                            
+                                            # Read matrix dimensions
+                                            dims = f.readline().strip().split()
+                                            n_rows, n_cols, n_entries = map(int, dims)
+                                            
+                                            # Read matrix entries
+                                            rows, cols, data = [], [], []
+                                            for line in f:
+                                                row, col, val = map(int, line.strip().split())
+                                                rows.append(row-1)  # Convert to 0-based indexing
+                                                cols.append(col-1)
+                                                data.append(val)
+                                        
+                                        # Create sparse matrix
+                                        matrix = sp.csr_matrix((data, (rows, cols)), shape=(n_rows, n_cols))
+                                        
+                                        # Create AnnData object
+                                        adata = sc.AnnData(matrix.T)
+                                        adata.var_names = gene_names
+                                        adata.obs_names = barcodes
+                                        
+                                        st.success(f"Successfully loaded data with {adata.n_obs} cells and {adata.n_vars} genes using direct file reading")
+                                    except Exception as e3:
+                                        st.error(f"Error loading 10X data with direct file reading: {str(e3)}")
+                                        # Log the contents of the temporary directory for debugging
+                                        st.error("Contents of temporary directory:")
+                                        for file in os.listdir(temp_dir):
+                                            file_path = os.path.join(temp_dir, file)
+                                            file_size = os.path.getsize(file_path)
+                                            st.error(f"- {file}: {file_size} bytes")
+                                        raise ValueError(f"Failed to load 10X data: {str(e3)}")
                         
                         # Extract study info from the first file name
                         geo_id = matrix_file.name.split('_')[0] if '_' in matrix_file.name else "dataset"
@@ -475,7 +581,7 @@ def main():
                                 <p>Please upload either:</p>
                                 <ul>
                                     <li>A single .h5ad file, or</li>
-                                    <li>Three 10X Genomics files (matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz)</li>
+                                    <li>Three 10X Genomics files (matrix.mtx/matrix.mtx.gz, features.tsv/features.tsv.gz/genes.tsv/genes.tsv.gz, barcodes.tsv/barcodes.tsv.gz)</li>
                                 </ul>
                             </div>
                         """, unsafe_allow_html=True)
