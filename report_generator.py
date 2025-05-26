@@ -277,3 +277,4 @@ def generate_pdf_report(
             os.chdir(original_dir)
         except Exception as e:
             print(f"Warning: Failed to restore original directory: {str(e)}")
+ 
