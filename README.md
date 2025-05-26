@@ -1,4 +1,4 @@
-# scAgentic: Single-cell RNA-seq Analysis Chat Interface
+# scAgentic: Genomics Data (Single-cell RNA-seq) Analysis Comprehensive Platform
 
 A Streamlit-based application for interactive single-cell RNA-seq analysis with a chat-like interface. This tool allows users to analyze single-cell data, generate UMAP plots, compare cell populations, and explore gene expression patterns through natural language queries.
 
