@@ -126,9 +126,7 @@ def preprocess_data(
     adata = adata.copy()
     figures = {}  # Store figures separately
     
-    # Calculate QC metrics
-    adata.var['mt'] = adata.var_names.str.startswith('MT-')
-    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+    
     
     # Generate highest expressed genes plot
     plt.figure(figsize=(8, 6))
@@ -136,6 +134,14 @@ def preprocess_data(
     figures['highest_expr_genes'] = plt.gcf()
     plt.close()
     
+    # Basic filtering: Filter cells based on minimum genes and cells
+    sc.pp.filter_cells(adata, min_genes=min_genes)
+    sc.pp.filter_genes(adata, min_cells=min_cells)
+
+    # Calculate QC metrics
+    adata.var['mt'] = adata.var_names.str.startswith('MT-')
+    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+
     # Store QC metrics before filtering as numpy arrays
     adata.uns['qc_metrics_before'] = {
         'n_genes_by_counts': adata.obs['n_genes_by_counts'].to_numpy(),
@@ -151,14 +157,7 @@ def preprocess_data(
     if max_percent_mt is None:
         max_percent_mt = np.percentile(adata.obs['pct_counts_mt'], 95)
     
-    # Filter cells
-    sc.pp.filter_cells(adata, min_genes=min_genes)
-    
-    # Filter genes
-    sc.pp.filter_genes(adata, min_cells=min_cells)
-    
-    # Filter cells based on mitochondrial percentage
-    adata = adata[adata.obs['pct_counts_mt'] < max_percent_mt, :]
+
     
     # Store raw counts
     adata.layers['counts'] = adata.X.copy()

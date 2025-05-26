@@ -394,7 +394,7 @@ def process_question(question: str, adata: sc.AnnData) -> str:
 
 def main():
     st.set_page_config(
-        page_title="CellCoachGPT - Single-Cell RNA-seq DataAnalysis",
+        page_title="scAgentic",
         page_icon="🧬",
         layout="wide",
         initial_sidebar_state="collapsed"
@@ -472,7 +472,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Main content
-    st.title("🧬 CellCoachGPT")
+    st.title("🧬 scAgentic")
     st.markdown("AI-Powered Single-Cell RNA-seq Data Analysis")
     
     # Initialize chat history if not exists
@@ -966,38 +966,13 @@ def main():
                         'plot': 'qc_scatter_mt.png, qc_scatter_genes.png'
                     })
                     
-                    # Interactive threshold selection
-                    st.markdown("### Adjust Filtering Thresholds")
-                    st.markdown("Based on the scatter plots above, you can adjust the filtering thresholds. The default values are suggested based on the data distribution.")
-                    
-                    # Calculate suggested thresholds
+                    # Calculate thresholds based on data distribution
                     suggested_genes = int(np.percentile(adata.obs.n_genes_by_counts, 95))
                     suggested_mt = float(np.percentile(adata.obs.pct_counts_mt, 95))
                     
-                    # Create columns for threshold inputs
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        max_genes = st.number_input(
-                            "Maximum number of genes per cell",
-                            min_value=0,
-                            max_value=int(adata.obs.n_genes_by_counts.max()),
-                            value=suggested_genes,
-                            help="Cells with more genes than this threshold will be filtered out"
-                        )
-                    
-                    with col2:
-                        max_mt = st.number_input(
-                            "Maximum percentage of mitochondrial genes",
-                            min_value=0.0,
-                            max_value=100.0,
-                            value=suggested_mt,
-                            help="Cells with higher percentage of mitochondrial genes will be filtered out"
-                        )
-                    
-                    # Apply filtering with user-selected thresholds
-                    filtered_adata = adata[adata.obs.n_genes_by_counts < max_genes, :].copy()
-                    filtered_adata = filtered_adata[filtered_adata.obs.pct_counts_mt < max_mt, :].copy()
+                    # Apply filtering with calculated thresholds
+                    filtered_adata = adata[adata.obs.n_genes_by_counts < suggested_genes, :].copy()
+                    filtered_adata = filtered_adata[filtered_adata.obs.pct_counts_mt < suggested_mt, :].copy()
                     
                     # Show filtering results
                     st.markdown("### Filtering Results")
@@ -1016,7 +991,7 @@ def main():
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
                         'step': 'Cell Filtering',
-                        'description': f'Filtered out cells based on QC metrics:\n- Removed cells with more than {max_genes} genes\n- Removed cells with more than {max_mt}% mitochondrial genes\n\nTotal cells removed: {adata.n_obs - filtered_adata.n_obs}',
+                        'description': f'Filtered out cells based on QC metrics:\n- Removed cells with more than {suggested_genes} genes (95th percentile)\n- Removed cells with more than {suggested_mt:.1f}% mitochondrial genes (95th percentile)\n\nTotal cells removed: {adata.n_obs - filtered_adata.n_obs}',
                         'plot': None
                     })
                     
@@ -1445,26 +1420,8 @@ def main():
         
         # Display results if preprocessing is done
         if st.session_state.preprocessing_done:
-            st.markdown("### Analysis Results")
-            
-            # Display analysis steps
-            st.markdown("#### Analysis Pipeline")
-            for i, step in enumerate(st.session_state.analysis_steps, 1):
-                with st.expander(f"{i}. {step['step']}", expanded=True):
-                    st.markdown(step['description'])
-                    if step['plot']:
-                        # Handle multiple plots in a single step
-                        plot_files = step['plot'].split(', ')
-                        for plot_file in plot_files:
-                            if os.path.exists(os.path.join(st.session_state.output_dir, plot_file)):
-                                st.image(os.path.join(st.session_state.output_dir, plot_file))
-                    
-                    # Display additional QC scatter plot for the Quality Control step
-                    if step['step'] == 'Quality Control' and os.path.exists(os.path.join(st.session_state.output_dir, 'qc_scatter.png')):
-                        st.markdown("**Additional QC Visualization:**")
-                        st.image(os.path.join(st.session_state.output_dir, 'qc_scatter.png'))
-            
-            # Download buttons
+            # Remove the "Analysis Results" section from UI
+            # Keep only the download buttons
             col1, col2 = st.columns(2)
             with col1:
                 if os.path.exists(os.path.join(st.session_state.output_dir, 'final_report.pdf')):
