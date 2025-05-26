@@ -29,6 +29,11 @@ import subprocess
 import shutil
 import scipy.sparse as sp
 
+# Configure scanpy settings
+sc.settings.verbosity = 3  # verbosity: errors (0), warnings (1), info (2), hints (3)
+sc.logging.print_header()
+sc.settings.set_figure_params(dpi=80, facecolor="white")
+
 def process_query_with_llm(query: str, available_functions: List[str]) -> Dict[str, Any]:
     """
     Process user query using local LLM (Mistral via Ollama).
@@ -302,9 +307,94 @@ def generate_pdf_report_safe(
         
         raise RuntimeError(f"PDF generation failed: {str(e)}")
 
+def process_question(question: str, adata: sc.AnnData) -> str:
+    """
+    Process a user question about the data and generate a response.
+    
+    Args:
+        question: The user's question
+        adata: The AnnData object containing the data
+        
+    Returns:
+        A string response to the user's question
+    """
+    # Convert question to lowercase for easier matching
+    question = question.lower()
+    
+    try:
+        # Handle questions about data dimensions
+        if any(x in question for x in ['how many cells', 'number of cells']):
+            return f"The dataset contains {adata.n_obs:,} cells."
+        
+        if any(x in question for x in ['how many genes', 'number of genes']):
+            return f"The dataset contains {adata.n_vars:,} genes."
+            
+        # Handle questions about clusters
+        if 'cluster' in question and 'how many' in question:
+            if 'leiden' in adata.obs.columns:
+                n_clusters = len(adata.obs['leiden'].unique())
+                return f"The analysis identified {n_clusters} clusters using the Leiden algorithm."
+            else:
+                return "Clustering has not been performed yet. Please run the preprocessing pipeline first."
+        
+        # Handle questions about specific genes
+        if 'expression' in question:
+            # Try to find a gene name in the question
+            genes = [gene for gene in adata.var_names if gene.upper() in question.upper()]
+            if genes:
+                gene = genes[0]
+                if gene in adata.var_names:
+                    mean_expr = adata[:, gene].X.mean()
+                    return f"The mean expression of {gene} across all cells is {mean_expr:.2f}."
+                else:
+                    return f"Gene {gene} was not found in the dataset."
+            else:
+                return "I couldn't identify which gene you're asking about. Please specify the gene name."
+        
+        # Handle questions about metadata
+        if any(x in question for x in ['metadata', 'what information', 'what data']):
+            metadata = list(adata.obs.columns)
+            if metadata:
+                return f"The dataset contains the following metadata: {', '.join(metadata)}"
+            else:
+                return "No metadata is available for this dataset."
+        
+        # Handle questions about highly variable genes
+        if 'highly variable' in question:
+            if 'highly_variable' in adata.var.columns:
+                n_hvg = adata.var['highly_variable'].sum()
+                return f"There are {n_hvg:,} highly variable genes in the dataset."
+            else:
+                return "Highly variable genes have not been computed yet. Please run the preprocessing pipeline first."
+        
+        # Handle questions about mitochondrial content
+        if any(x in question for x in ['mitochondrial', 'mt content']):
+            if 'pct_counts_mt' in adata.obs.columns:
+                mean_mt = adata.obs['pct_counts_mt'].mean()
+                return f"The mean mitochondrial content across all cells is {mean_mt:.2f}%."
+            else:
+                return "Mitochondrial content has not been calculated yet. Please run the preprocessing pipeline first."
+        
+        # Handle questions about rerunning analysis
+        if any(x in question for x in ['rerun', 'redo', 'run again']):
+            return "To rerun the analysis, I'll reset the preprocessing flag. You can adjust parameters through the chat interface."
+        
+        # Default response for unrecognized questions
+        return ("I'm not sure how to answer that question. You can ask me about:\n"
+                "- Number of cells or genes\n"
+                "- Cluster information\n"
+                "- Gene expression\n"
+                "- Available metadata\n"
+                "- Highly variable genes\n"
+                "- Mitochondrial content\n"
+                "- Rerunning the analysis")
+                
+    except Exception as e:
+        return f"I encountered an error while processing your question: {str(e)}"
+
 def main():
     st.set_page_config(
-        page_title="scAgentic - Single-Cell Analysis",
+        page_title="CellCoachGPT - Single-Cell RNA-seq DataAnalysis",
         page_icon="🧬",
         layout="wide",
         initial_sidebar_state="collapsed"
@@ -382,8 +472,8 @@ def main():
     """, unsafe_allow_html=True)
     
     # Main content
-    st.title("🧬 scAgentic")
-    st.markdown("AI-Powered Single-Cell Analysis")
+    st.title("🧬 CellCoachGPT")
+    st.markdown("AI-Powered Single-Cell RNA-seq Data Analysis")
     
     # Initialize chat history if not exists
     if 'chat_history' not in st.session_state:
@@ -704,16 +794,128 @@ def main():
                     # Clear previous analysis steps
                     st.session_state.analysis_steps = []
                     
-                    # Quality Control
-                    st.markdown('<p class="step-message">Running quality control...</p>', unsafe_allow_html=True)
+                    # Plot highest expressed genes (FIRST STEP)
+                    st.markdown('<p class="step-message">Plotting highest expressed genes...</p>', unsafe_allow_html=True)
+                    sc.pl.highest_expr_genes(adata, n_top=20, show=False)
+                    fig = plt.gcf()
+                    if fig.get_axes():
+                        fig.savefig(os.path.join(st.session_state.output_dir, 'highest_expr_genes.png'),
+                                  dpi=300, bbox_inches='tight')
+                        st.session_state.figures['highest_expr_genes'] = fig
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'Highest Expressed Genes',
+                            'description': 'Shows the genes that yield the highest fraction of counts in each single cell, across all cells. This plot helps identify potential technical artifacts or highly expressed genes that might dominate the dataset.',
+                            'plot': 'highest_expr_genes.png'
+                        })
+                    plt.close(fig)
+                    
+                    # Basic filtering
+                    st.markdown('<p class="step-message">Performing basic filtering...</p>', unsafe_allow_html=True)
+                    
+                    # Store original cell and gene counts
+                    original_cells = adata.n_obs
+                    original_genes = adata.n_vars
+                    
+                    # Filter cells with at least 200 genes
+                    sc.pp.filter_cells(adata, min_genes=200)
+                    cells_after_min_genes = adata.n_obs
+                    
+                    # Filter genes expressed in at least 3 cells
+                    sc.pp.filter_genes(adata, min_cells=3)
+                    genes_after_min_cells = adata.n_vars
+                    
+                    # Basic filtering message
+                    filtering_message = f"Filtered out {original_genes - genes_after_min_cells} genes that are detected in less than 3 cells"
+                    
+                    # Add step to analysis steps (for PDF report)
+                    st.session_state.analysis_steps.append({
+                        'step': 'Basic filtering',
+                        'description': filtering_message,
+                        'plot': None
+                    })
+                    
+                    # Display filtering results (for screen)
+                    st.markdown("### Basic Filtering Results")
+                    st.markdown(f"**{filtering_message}**")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("Original cells", original_cells)
+                    with col2:
+                        st.metric("Cells after filtering", cells_after_min_genes)
+                    with col3:
+                        st.metric("Original genes", original_genes)
+                    with col4:
+                        st.metric("Genes after filtering", genes_after_min_cells)
+                    
+                    # Calculate QC metrics
+                    st.markdown('<p class="step-message">Calculating QC metrics...</p>', unsafe_allow_html=True)
                     adata.var['mt'] = adata.var_names.str.startswith('MT-')
-                    sc.pp.calculate_qc_metrics(
+                    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'QC Metrics Calculation',
+                        'description': 'Calculated quality control metrics including:\n- Number of genes expressed in each cell\n- Total counts per cell\n- Percentage of counts in mitochondrial genes',
+                        'plot': None
+                    })
+                    
+                    # Create QC violin plots
+                    st.markdown('<p class="step-message">Generating QC violin plots...</p>', unsafe_allow_html=True)
+                    sc.pl.violin(
                         adata,
-                        qc_vars=['mt'],
-                        percent_top=None,
-                        log1p=False,
-                        inplace=True
+                        ["n_genes_by_counts", "total_counts", "pct_counts_mt"],
+                        jitter=0.4,
+                        multi_panel=True,
+                        show=False
                     )
+                    fig = plt.gcf()
+                    if fig.get_axes():
+                        fig.savefig(os.path.join(st.session_state.output_dir, 'qc_distributions.png'),
+                                  dpi=300, bbox_inches='tight')
+                        st.session_state.figures['qc_distributions'] = fig
+                        
+                        # Display the violin plots on the screen
+                        st.pyplot(fig)
+                        
+                        # Add explanation about filtering thresholds
+                        st.markdown("### Filtering Thresholds")
+                        st.markdown("Based on these plots, we choose the following thresholds for filtering:")
+                        st.markdown("- Maximum number of genes per cell: 2500")
+                        st.markdown("- Maximum percentage of mitochondrial genes: 5%")
+                        
+                        # Add step to analysis steps
+                        st.session_state.analysis_steps.append({
+                            'step': 'QC Violin Plots',
+                            'description': 'Generated violin plots showing the distribution of QC metrics:\n- Number of genes expressed in each cell\n- Total counts per cell\n- Percentage of counts in mitochondrial genes\n\nThese plots help identify potential filtering thresholds for removing low-quality cells.',
+                            'plot': 'qc_distributions.png'
+                        })
+                    plt.close(fig)
+                    
+                    # Additional filtering based on violin plots
+                    st.markdown('<p class="step-message">Performing additional filtering based on QC metrics...</p>', unsafe_allow_html=True)
+                    
+                    # Store cell count before additional filtering
+                    cells_before_additional_filtering = adata.n_obs
+                    
+                    # Filter cells based on QC metrics
+                    adata = adata[adata.obs.n_genes_by_counts < 2500, :]
+                    adata = adata[adata.obs.pct_counts_mt < 5, :].copy()
+                    
+                    # Calculate cells removed
+                    cells_removed = cells_before_additional_filtering - adata.n_obs
+                    
+                    # Display filtering results with the requested message
+                    st.markdown(f"**Removed {cells_removed} cells that have too many mitochondrial genes expressed or too many total counts. You can later ask via chat to set another thresholds for filtering.**")
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Additional QC Filtering',
+                        'description': f'Performed additional filtering based on QC metrics:\n- Removed cells with more than 2500 genes\n- Removed cells with more than 5% mitochondrial genes\n\nTotal cells removed: {cells_removed}',
+                        'plot': None
+                    })
                     
                     # Create QC plots
                     sc.pl.violin(adata, ['n_genes_by_counts', 'total_counts', 'pct_counts_mt'],
@@ -731,25 +933,90 @@ def main():
                         })
                     plt.close(fig)
                     
-                    # Create QC scatter plot
-                    sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", color="pct_counts_mt", show=False)
-                    fig = plt.gcf()
-                    if fig.get_axes():
-                        fig.savefig(os.path.join(st.session_state.output_dir, 'qc_scatter.png'),
-                                  dpi=300, bbox_inches='tight')
-                        st.session_state.figures['qc_scatter'] = fig
-                    plt.close(fig)
+                    # Create QC scatter plots
+                    st.markdown('<p class="step-message">Analyzing QC metrics...</p>', unsafe_allow_html=True)
                     
-                    # Filter cells
-                    st.markdown('<p class="step-message">Filtering cells...</p>', unsafe_allow_html=True)
-                    sc.pp.filter_cells(adata, min_genes=st.session_state.params['min_genes'])
-                    sc.pp.filter_genes(adata, min_cells=st.session_state.params['min_cells'])
-                    adata = adata[adata.obs['pct_counts_mt'] < st.session_state.params['max_percent_mt'], :]
+                    # Create scatter plots for threshold selection
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        sc.pl.scatter(adata, x="total_counts", y="pct_counts_mt", show=False)
+                        fig1 = plt.gcf()
+                        if fig1.get_axes():
+                            fig1.savefig(os.path.join(st.session_state.output_dir, 'qc_scatter_mt.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['qc_scatter_mt'] = fig1
+                            st.pyplot(fig1)
+                        plt.close(fig1)
+                    
+                    with col2:
+                        sc.pl.scatter(adata, x="total_counts", y="n_genes_by_counts", show=False)
+                        fig2 = plt.gcf()
+                        if fig2.get_axes():
+                            fig2.savefig(os.path.join(st.session_state.output_dir, 'qc_scatter_genes.png'),
+                                      dpi=300, bbox_inches='tight')
+                            st.session_state.figures['qc_scatter_genes'] = fig2
+                            st.pyplot(fig2)
+                        plt.close(fig2)
                     
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
-                        'step': 'Filtering Cells',
-                        'description': f'Based on the QC metric plots, one could now remove cells that have too many mitochondrial genes expressed or too many total counts by setting manual or automatic thresholds. However, sometimes what appears to be poor QC metrics can be driven by real biology so we suggest starting with a very permissive filtering strategy and revisiting it at a later point. We therefore now only filter cells and genes based on the Quality Control plots and report these filtered cells and genes in this section. Additionally, it is important to note that for datasets with multiple batches, quality control should be performed for each sample individually as quality control thresholds can vary substantially between batches.\n\nFiltered cells with at least {st.session_state.params["min_genes"]} genes, genes expressed in at least {st.session_state.params["min_cells"]} cells, and cells with less than {st.session_state.params["max_percent_mt"]}% mitochondrial content.',
+                        'step': 'QC Scatter Plots',
+                        'description': 'Scatter plots showing the relationship between total counts and (1) percentage of mitochondrial genes, (2) number of genes per cell. These plots help identify potential filtering thresholds for removing low-quality cells.',
+                        'plot': 'qc_scatter_mt.png, qc_scatter_genes.png'
+                    })
+                    
+                    # Interactive threshold selection
+                    st.markdown("### Adjust Filtering Thresholds")
+                    st.markdown("Based on the scatter plots above, you can adjust the filtering thresholds. The default values are suggested based on the data distribution.")
+                    
+                    # Calculate suggested thresholds
+                    suggested_genes = int(np.percentile(adata.obs.n_genes_by_counts, 95))
+                    suggested_mt = float(np.percentile(adata.obs.pct_counts_mt, 95))
+                    
+                    # Create columns for threshold inputs
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        max_genes = st.number_input(
+                            "Maximum number of genes per cell",
+                            min_value=0,
+                            max_value=int(adata.obs.n_genes_by_counts.max()),
+                            value=suggested_genes,
+                            help="Cells with more genes than this threshold will be filtered out"
+                        )
+                    
+                    with col2:
+                        max_mt = st.number_input(
+                            "Maximum percentage of mitochondrial genes",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=suggested_mt,
+                            help="Cells with higher percentage of mitochondrial genes will be filtered out"
+                        )
+                    
+                    # Apply filtering with user-selected thresholds
+                    filtered_adata = adata[adata.obs.n_genes_by_counts < max_genes, :].copy()
+                    filtered_adata = filtered_adata[filtered_adata.obs.pct_counts_mt < max_mt, :].copy()
+                    
+                    # Show filtering results
+                    st.markdown("### Filtering Results")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Original cells", adata.n_obs)
+                    with col2:
+                        st.metric("Filtered cells", filtered_adata.n_obs)
+                    with col3:
+                        st.metric("Cells removed", adata.n_obs - filtered_adata.n_obs)
+                    
+                    # Update adata with filtered data
+                    adata = filtered_adata
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Cell Filtering',
+                        'description': f'Filtered out cells based on QC metrics:\n- Removed cells with more than {max_genes} genes\n- Removed cells with more than {max_mt}% mitochondrial genes\n\nTotal cells removed: {adata.n_obs - filtered_adata.n_obs}',
                         'plot': None
                     })
                     
@@ -810,16 +1077,22 @@ def main():
                     # Save count data
                     adata.layers["counts"] = adata.X.copy()
                     
-                    # Normalizing to median total counts
+                    # Total-count normalize (library-size correct) the data matrix to 10,000 reads per cell
                     sc.pp.normalize_total(adata, target_sum=1e4)
+                    st.markdown("**Total-count normalized to 10,000 reads per cell**")
+                    
                     # Logarithmize the data
                     sc.pp.log1p(adata)
+                    st.markdown("**Log-transformed the data**")
+                    
+                    # Scale the data
                     sc.pp.scale(adata, max_value=10)
+                    st.markdown("**Scaled the data to have zero mean and unit variance**")
                     
                     # Add step to analysis steps
                     st.session_state.analysis_steps.append({
                         'step': 'Normalization and Scaling',
-                        'description': 'The next preprocessing step is normalization. A common approach is count depth scaling with subsequent log plus one (log1p) transformation. Count depth scaling normalizes the data to a "size factor" such as the median count depth in the dataset, ten thousand (CP10k) or one million (CPM, counts per million). We are applying median count depth normalization with log1p transformation (AKA log1PF). The size factor for count depth scaling can be controlled via target_sum in pp.normalize_total. After normalization, we scaled the data to have zero mean and unit variance.',
+                        'description': 'Total-count normalized the data matrix to 10,000 reads per cell, so that counts become comparable among cells. Then logarithmized the data with log1p transformation and scaled the data to have zero mean and unit variance.',
                         'plot': None
                     })
                     
@@ -829,8 +1102,9 @@ def main():
                     # Check if 'sample' column exists in adata.obs
                     batch_key = "sample" if "sample" in adata.obs.columns else None
                     
-                    # Run highly variable genes selection
-                    sc.pp.highly_variable_genes(adata, n_top_genes=st.session_state.params['n_top_genes'], batch_key=batch_key)
+                    # Run highly variable genes selection with specified parameters
+                    sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5, batch_key=batch_key)
+                    st.markdown("**Identified highly variable genes with parameters: min_mean=0.0125, max_mean=3, min_disp=0.5**")
                     
                     # Plot HVGs
                     sc.pl.highly_variable_genes(adata, show=False)
@@ -842,14 +1116,42 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Feature Selection',
-                            'description': 'As a next step, we want to reduce the dimensionality of the dataset and only include the most informative genes. This step is commonly known as feature selection. Here we use the scanpy function pp.highly_variable_genes that annotates highly variable genes by reproducing the implementations of Seurat [Satija2015], Cell Ranger [Zheng2017], and Seurat v3 [Stuart2019] depending on the chosen flavor. We selected the top {n_top_genes} highly variable genes for downstream analysis.'.format(n_top_genes=st.session_state.params['n_top_genes']),
+                            'description': 'Identified highly variable genes with parameters: min_mean=0.0125, max_mean=3, min_disp=0.5. These genes are used for downstream analysis to reduce dimensionality and focus on the most informative features.',
                             'plot': 'highly_variable_genes.png'
                         })
                     plt.close(fig)
                     
+                    # Set the .raw attribute of the AnnData object
+                    st.markdown('<p class="step-message">Setting raw attribute...</p>', unsafe_allow_html=True)
+                    adata.raw = adata.copy()
+                    st.markdown("**Set the .raw attribute to the normalized and logarithmized raw gene expression for later use in differential testing and visualizations**")
+                    
+                    # Filter to only include highly variable genes
+                    st.markdown('<p class="step-message">Filtering to highly variable genes...</p>', unsafe_allow_html=True)
+                    adata = adata[:, adata.var.highly_variable]
+                    st.markdown(f"**Filtered to {adata.n_vars} highly variable genes**")
+                    
+                    # Regress out effects of total counts and mitochondrial genes
+                    st.markdown('<p class="step-message">Regressing out effects of total counts and mitochondrial genes...</p>', unsafe_allow_html=True)
+                    sc.pp.regress_out(adata, ["total_counts", "pct_counts_mt"])
+                    st.markdown("**Regressed out effects of total counts per cell and the percentage of mitochondrial genes expressed**")
+                    
+                    # Scale the data
+                    st.markdown('<p class="step-message">Scaling data to unit variance...</p>', unsafe_allow_html=True)
+                    sc.pp.scale(adata, max_value=10)
+                    st.markdown("**Scaled each gene to unit variance and clipped values exceeding standard deviation 10**")
+                    
+                    # Add step to analysis steps
+                    st.session_state.analysis_steps.append({
+                        'step': 'Data Preprocessing',
+                        'description': 'Filtered to highly variable genes, regressed out effects of total counts and mitochondrial genes, and scaled the data to unit variance. This preprocessing step helps reduce technical noise and focuses the analysis on the most informative features.',
+                        'plot': None
+                    })
+                    
                     # Run PCA
                     st.markdown('<p class="step-message">Running PCA...</p>', unsafe_allow_html=True)
-                    sc.tl.pca(adata, use_highly_variable=True)
+                    sc.tl.pca(adata, svd_solver="arpack")
+                    st.markdown("**Reduced the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data**")
                     
                     # Plot PCA variance ratio
                     sc.pl.pca_variance_ratio(adata, n_pcs=st.session_state.params['n_pcs'], log=True, show=False)
@@ -861,7 +1163,7 @@ def main():
                         # Add step to analysis steps
                         st.session_state.analysis_steps.append({
                             'step': 'Dimensionality Reduction',
-                            'description': 'Reduce the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data. We inspect the contribution of single PCs to the total variance in the data. This gives us information about how many PCs we should consider in order to compute the neighborhood relations of cells, e.g. used in the clustering function Leiden or tSNE. In experience, there does not seem to be signifigant downside to overestimating the numer of principal components.',
+                            'description': 'Reduced the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data. We inspect the contribution of single PCs to the total variance in the data. This gives us information about how many PCs we should consider in order to compute the neighborhood relations of cells, e.g. used in the clustering function Leiden or tSNE. In experience, there does not seem to be signifigant downside to overestimating the numer of principal components.',
                             'plot': 'pca_variance.png'
                         })
                     plt.close(fig)
@@ -1058,7 +1360,8 @@ def main():
                         # Ensure all required plots exist
                         required_plots = [
                             'qc_distributions.png',
-                            'qc_scatter.png',
+                            'qc_scatter_mt.png',
+                            'qc_scatter_genes.png',
                             'highly_variable_genes.png',
                             'pca_variance.png',
                             'umap_clusters.png',
