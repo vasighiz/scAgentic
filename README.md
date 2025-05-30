@@ -1,67 +1,65 @@
-# scAgentic
+# 📦 scAgent v0.1 Release
 
-🚧 This project is under active development (Day 1 of 90). I’m documenting my daily progress here as I build scAgentic — an AI copilot for single-cell data analysis.
+Welcome to the first public release of scAgent, an AI-powered assistant for single-cell RNA-seq analysis. This version includes the core functionality for automatic preprocessing, QC visualization, and report generation — designed to be a starting point for researchers who want fast insights from their 10x or Anndata files.
 
-Day 1- The app currently uses a local LLM (Mistral via Ollama) for processing natural language queries about single-cell data, with functions like process_query_with_llm() that interpret user questions and map them to specific analysis functions, but this feature is not yet fully implemented as indicated by the ☐ AI Copilot status in the README.
+________________________________________
 
-## Project Description
-scAgentic is an AI-powered single-cell RNA-seq data analysis platform that combines automated preprocessing pipelines with an intelligent copilot interface, enabling researchers to perform comprehensive single-cell analysis through natural language interactions.
+## ✅ Features in v0.1
+- Upload support for raw 10x files or .h5ad objects
+- Automatic preprocessing pipeline (no parameter tuning required)
+- Best-practice defaults + intelligent data-based thresholds (optional)
+- UMAP, PCA, and QC visualizations (Violin, Scatter, HVG)
+- Clean UI with auto-pilot mode and side info panel
+- Publication-ready PDF report generation (LaTeX-powered)
+- GEO accession auto-detection with study metadata linking
+- Docker + Streamlit app ready
 
-## Features
-- ✅ **Preprocessing Pipeline**
-  - Quality control and filtering
-  - Normalization and scaling
-  - Highly variable gene selection
-  - Dimensionality reduction (PCA)
-  - Clustering (Leiden)
-  - Differential expression analysis
-  - PDF report generation
+________________________________________
 
-- ☐ **Literature Integration**
-  - Gene set enrichment analysis
-  - Pathway analysis
-  - Literature-based cell type annotation
+## 🔜 Planned in v0.2
+- LLM integration for natural language querying
+- Chat-driven exploration of cell populations, marker genes, and more
+- Real-time explanation of plots and QC steps
+- RAG with GEO descriptions for study summaries
 
-- ☐ **AI Copilot**
-  - Natural language query processing
-  - Interactive parameter adjustment
-  - Automated analysis suggestions
-  - Context-aware responses
+________________________________________
 
-- ☐ **Visualization**
-  - Interactive UMAP plots
-  - Gene expression heatmaps
-  - Violin plots
-  - QC metric visualizations
+## 🚀 Get Started
 
-## Getting Started
-
-### Prerequisites
-- Python 3.8 or higher
-- pip (Python package installer)
-
-### Installation
-1. Clone the repository:
+### Option 1: Run via Docker
 ```bash
-git clone https://github.com/vasighiz/scAgentic.git
-cd scAgentic
+git clone https://github.com/vasighiz/scagentic.git
+cd scagentic
+docker build -t scagent .
+docker run -p 8501:8501 scagent
 ```
 
-2. Install required packages:
+### Option 2: Run Locally
 ```bash
-pip install -r requirements.txt
-```
-
-3. Run the application:
-```bash
+git clone https://github.com/vasighiz/scagentic.git
+cd scagentic
+conda env create -f environment.yml
+conda activate scagentic
 streamlit run app.py
 ```
 
-### Usage
-1. Upload your single-cell RNA-seq data (either .h5ad file or 10X Genomics files)
-2. The preprocessing pipeline will run automatically
-3. Use the chat interface to ask questions about your data or request specific analyses
-4. Download the PDF report and processed data for further analysis
+## 📂 Input Formats
+- Raw 10x folder: matrix.mtx.gz, features.tsv.gz, barcodes.tsv.gz
+- Processed: .h5ad
 
-## License
-This project is licensed under the MIT License - see the LICENSE file for details. 
+________________________________________
+
+## 📄 License
+MIT License
+
+________________________________________
+
+## 👩‍💻 Author
+Akram Vasighizaker | [LinkedIn](https://www.linkedin.com/in/akram-vasighizaker/) | [Website](https://vasighiz.github.io/)
+
+If you find this tool helpful, give it a ⭐ on GitHub and share with other bioinformaticians!
+
+________________________________________
+
+## ✉️ Feedback / Feature Requests
+Please open an issue or email me if you'd like to suggest a feature, report a bug, or collaborate. 

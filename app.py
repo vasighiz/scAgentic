@@ -1420,8 +1420,19 @@ def main():
         
         # Display results if preprocessing is done
         if st.session_state.preprocessing_done:
-            # Remove the "Analysis Results" section from UI
-            # Keep only the download buttons
+            # Display analysis steps
+            st.markdown("### Analysis Steps")
+            for step in st.session_state.analysis_steps:
+                with st.expander(f"📊 {step['step']}"):
+                    st.markdown(step['description'])
+                    if step['plot']:
+                        plot_files = step['plot'].split(', ')
+                        for plot_file in plot_files:
+                            plot_path = os.path.join(st.session_state.output_dir, plot_file)
+                            if os.path.exists(plot_path):
+                                st.image(plot_path)
+
+            # Download buttons
             col1, col2 = st.columns(2)
             with col1:
                 if os.path.exists(os.path.join(st.session_state.output_dir, 'final_report.pdf')):
@@ -1442,43 +1453,6 @@ def main():
                             file_name="processed_data.h5ad",
                             mime="application/octet-stream"
                         )
-        
-        # Chat interface
-        st.markdown("### Ask Questions About Your Data")
-        user_question = st.text_input("Type your question here...", key="user_input")
-        if user_question:
-            # Add user message to chat
-            st.session_state.chat_history.append({
-                'role': 'user',
-                'content': user_question
-            })
-            
-            with st.spinner("Processing your request..."):
-                try:
-                    # Process the question and generate response
-                    response = process_question(user_question, adata)
-                    
-                    # Add assistant response to chat
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': response
-                    })
-                    
-                    # Check if the question was about parameter adjustments
-                    if "parameter" in user_question.lower() or "redo" in user_question.lower():
-                        # Reset preprocessing flag to allow re-running with new parameters
-                        st.session_state.preprocessing_done = False
-                        st.experimental_rerun()
-                    
-                except Exception as e:
-                    st.error(f"Error processing question: {str(e)}")
-                    st.session_state.chat_history.append({
-                        'role': 'assistant',
-                        'content': f"I encountered an error while processing your question: {str(e)}"
-                    })
-            
-            # Clear the input
-            st.session_state.user_input = ""
 
 if __name__ == "__main__":
     main() 
