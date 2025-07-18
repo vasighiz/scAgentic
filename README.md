@@ -65,7 +65,7 @@ MIT License
 ________________________________________
 
 ## Author
-Akram Vasighi | [LinkedIn](https://www.linkedin.com/in/vasighi/) | [Website]([https://vasighiz.github.io/](https://vasighiz.github.io/portfolio/))
+Akram Vasighi | [LinkedIn](https://www.linkedin.com/in/vasighi/) | [Website]([https://vasighiz.github.io/portfolio/])
 
 If you find this tool helpful, give it a ⭐ on GitHub and share with other bioinformaticians!
 
