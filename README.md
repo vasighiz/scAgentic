@@ -7,7 +7,7 @@ ________________________________________
 ##  Features in v0.1
 - Upload support for raw 10x files or .h5ad objects
 - Automatic preprocessing pipeline (no parameter tuning required)
-- Best-practice defaults + intelligent data-based thresholds (optional)
+- Best-practice defaults + intelligent data-based thresholds
 - UMAP, PCA, and QC visualizations (Violin, Scatter, HVG)
 - Clean UI with auto-pilot mode and side info panel
 - Publication-ready PDF report generation (LaTeX-powered)
