@@ -28,6 +28,12 @@ from datetime import datetime
 import subprocess
 import shutil
 import scipy.sparse as sp
+import anthropic
+from dotenv import load_dotenv
+import PyPDF2
+
+# Load environment variables from .env
+load_dotenv()
 
 # Configure scanpy settings
 sc.settings.verbosity = 3  # verbosity: errors (0), warnings (1), info (2), hints (3)
@@ -307,90 +313,73 @@ def generate_pdf_report_safe(
         
         raise RuntimeError(f"PDF generation failed: {str(e)}")
 
+def extract_pdf_text(pdf_path):
+    try:
+        with open(pdf_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            text = ''
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + '\n'
+        return text
+    except Exception as e:
+        return f"[Error extracting PDF text: {str(e)}]"
+
 def process_question(question: str, adata: sc.AnnData) -> str:
     """
-    Process a user question about the data and generate a response.
-    
+    Use Anthropic Claude API to answer a user question about the data, always including PDF report context if available.
     Args:
         question: The user's question
         adata: The AnnData object containing the data
-        
     Returns:
-        A string response to the user's question
+        A string response from Claude
     """
-    # Convert question to lowercase for easier matching
-    question = question.lower()
-    
+    # Compose context about the data
+    context = f"You are an expert in single-cell RNA-seq analysis. The user has uploaded a dataset with {adata.n_obs} cells and {adata.n_vars} genes. The available metadata columns are: {', '.join(list(adata.obs.columns))}. "
+    # Try to infer the dataset name from adata or session (fallback: GSM... in adata.uns or file path)
+    dataset_id = None
+    if hasattr(adata, 'uns') and 'dataset_id' in adata.uns:
+        dataset_id = adata.uns['dataset_id']
+    elif hasattr(adata, 'filename'):
+        # If AnnData loaded from file, try to parse dataset id from filename
+        import re
+        m = re.search(r'GSM\d+', str(adata.filename))
+        if m:
+            dataset_id = m.group(0)
+    # Fallback: look for GSM in obs_names or other AnnData attributes
+    if not dataset_id:
+        for k in ['obs_names', 'var_names']:
+            arr = getattr(adata, k, None)
+            if arr is not None and len(arr) > 0 and isinstance(arr[0], str):
+                import re
+                m = re.search(r'GSM\d+', arr[0])
+                if m:
+                    dataset_id = m.group(0)
+                    break
+    # If dataset_id found, look for PDF
+    pdf_text = None
+    if dataset_id:
+        pdf_path = f"analysis_results_{dataset_id}/final_report.pdf"
+        if os.path.exists(pdf_path):
+            pdf_text = extract_pdf_text(pdf_path)
+            # Limit to 3000 characters for prompt size
+            if pdf_text:
+                context += f"Here is the analysis report for this dataset:\n{pdf_text[:3000]}\n"
+    context += "\nAnswer the following question about the data in a concise, clear, and helpful way for a bioinformatics researcher. If the question is ambiguous, ask for clarification."
     try:
-        # Handle questions about data dimensions
-        if any(x in question for x in ['how many cells', 'number of cells']):
-            return f"The dataset contains {adata.n_obs:,} cells."
-        
-        if any(x in question for x in ['how many genes', 'number of genes']):
-            return f"The dataset contains {adata.n_vars:,} genes."
-            
-        # Handle questions about clusters
-        if 'cluster' in question and 'how many' in question:
-            if 'leiden' in adata.obs.columns:
-                n_clusters = len(adata.obs['leiden'].unique())
-                return f"The analysis identified {n_clusters} clusters using the Leiden algorithm."
-            else:
-                return "Clustering has not been performed yet. Please run the preprocessing pipeline first."
-        
-        # Handle questions about specific genes
-        if 'expression' in question:
-            # Try to find a gene name in the question
-            genes = [gene for gene in adata.var_names if gene.upper() in question.upper()]
-            if genes:
-                gene = genes[0]
-                if gene in adata.var_names:
-                    mean_expr = adata[:, gene].X.mean()
-                    return f"The mean expression of {gene} across all cells is {mean_expr:.2f}."
-                else:
-                    return f"Gene {gene} was not found in the dataset."
-            else:
-                return "I couldn't identify which gene you're asking about. Please specify the gene name."
-        
-        # Handle questions about metadata
-        if any(x in question for x in ['metadata', 'what information', 'what data']):
-            metadata = list(adata.obs.columns)
-            if metadata:
-                return f"The dataset contains the following metadata: {', '.join(metadata)}"
-            else:
-                return "No metadata is available for this dataset."
-        
-        # Handle questions about highly variable genes
-        if 'highly variable' in question:
-            if 'highly_variable' in adata.var.columns:
-                n_hvg = adata.var['highly_variable'].sum()
-                return f"There are {n_hvg:,} highly variable genes in the dataset."
-            else:
-                return "Highly variable genes have not been computed yet. Please run the preprocessing pipeline first."
-        
-        # Handle questions about mitochondrial content
-        if any(x in question for x in ['mitochondrial', 'mt content']):
-            if 'pct_counts_mt' in adata.obs.columns:
-                mean_mt = adata.obs['pct_counts_mt'].mean()
-                return f"The mean mitochondrial content across all cells is {mean_mt:.2f}%."
-            else:
-                return "Mitochondrial content has not been calculated yet. Please run the preprocessing pipeline first."
-        
-        # Handle questions about rerunning analysis
-        if any(x in question for x in ['rerun', 'redo', 'run again']):
-            return "To rerun the analysis, I'll reset the preprocessing flag. You can adjust parameters through the chat interface."
-        
-        # Default response for unrecognized questions
-        return ("I'm not sure how to answer that question. You can ask me about:\n"
-                "- Number of cells or genes\n"
-                "- Cluster information\n"
-                "- Gene expression\n"
-                "- Available metadata\n"
-                "- Highly variable genes\n"
-                "- Mitochondrial content\n"
-                "- Rerunning the analysis")
-                
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-3-opus-20240229",
+            max_tokens=256,
+            temperature=0.2,
+            messages=[
+                {"role": "user", "content": context + '\n' + question}
+            ]
+        )
+        return response.content[0].text.strip() if response.content else "[No response from Claude]"
     except Exception as e:
-        return f"I encountered an error while processing your question: {str(e)}"
+        return f"[Claude API error: {str(e)}]"
 
 def main():
     st.set_page_config(
@@ -474,6 +463,35 @@ def main():
     # Main content
     st.title("🧬 scAgentic")
     st.markdown("AI-Powered Single-Cell RNA-seq Data Analysis")
+
+    # --- Simple Chat Interface ---
+    st.markdown("---")
+    with st.expander("💬 Simple Data Chat (Ask about your data!)", expanded=False):
+        if 'simple_chat' not in st.session_state:
+            st.session_state.simple_chat = []  # list of dicts: {role, content}
+        if 'adata' in st.session_state:
+            adata = st.session_state['adata']
+            # Display chat history
+            for msg in st.session_state.simple_chat:
+                if msg['role'] == 'user':
+                    st.markdown(f"<div style='background:#e3f2fd;padding:0.5em 1em;border-radius:0.5em;margin-bottom:0.5em'><b>🧑 You:</b> {msg['content']}</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div style='background:#f5f5f5;padding:0.5em 1em;border-radius:0.5em;margin-bottom:0.5em'><b>🤖 Agent:</b> {msg['content']}</div>", unsafe_allow_html=True)
+            # Input box with form
+            with st.form(key="simple_chat_form", clear_on_submit=True):
+                user_input = st.text_input("Ask a question about your data (e.g. 'How many cells?')", key="simple_chat_input")
+                submitted = st.form_submit_button("Send")
+                if submitted and user_input:
+                    st.session_state.simple_chat.append({'role': 'user', 'content': user_input})
+                    response = process_question(user_input, adata)
+                    st.session_state.simple_chat.append({'role': 'assistant', 'content': response})
+                    st.rerun()
+            if st.button("Clear Chat History", key="clear_simple_chat"):
+                st.session_state.simple_chat = []
+                st.rerun()
+        else:
+            st.info("Upload and process your data to enable chat.")
+    st.markdown("---")
     
     # Initialize chat history if not exists
     if 'chat_history' not in st.session_state:
